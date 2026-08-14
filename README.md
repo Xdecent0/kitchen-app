@@ -21,15 +21,26 @@ The code repo is public because GitHub Pages on a private repo requires a paid p
 ## Layout
 
 ```
-index.html      shell and screens
-app.css         design system, tokens mirror the approved comps
-app.js          state in, DOM out
-lib/model.js    normalization, shelf life, forecast, list assembly — pure functions
-lib/store.js    local persistence and reference tables
-sw.js           cache-first shell so the list survives a dead signal
+index.html            shell, icon sprite, navigation
+app.css               design system; tokens mirror the approved comps
+app.js                router and chrome
+sw.js                 cache-first shell so the list survives a dead signal
+
+lib/model.js          normalization, shelf life, forecast, aisle grouping
+lib/recipes.js        stock matching, ranking, what cooking consumes
+lib/planning.js       week menu, price history, eating log
+lib/github.js         Contents API transport and the job protocol
+lib/sync.js           per-entry merges, tombstones, history union
+lib/receipt.js        camera, QR, and turning raw lines into stock
+lib/vault.js          markdown tables and recipe notes in, structures out
+lib/state.js          the single mutable state with an outbox
+lib/dom.js            escaping template helper, icons, toasts
+
+screens/*.js          one file per screen: {render, mount, leave, actions}
+data-repo-template/   what goes into the private data repo, incl. the workflow
 ```
 
-`lib/model.js` holds every domain decision and touches neither the DOM nor storage, so it can be reasoned about and tested on its own.
+Everything under `lib/` is domain logic that touches neither the DOM nor storage, so it can be reasoned about on its own. Screens never compute — they ask.
 
 ## Running locally
 
@@ -41,9 +52,9 @@ python -m http.server 8778 --directory .
 
 ## State of things
 
-Working: shopping list with aisle grouping and purchase-rhythm reasons, stock sorted by urgency with zone breakdown, offline indicator, empty states, service worker, phone and desktop layouts.
+Thirteen screens are working end to end: the shopping list with aisle grouping and purchase-rhythm reasons, stock sorted by what spoils first, the item card, receipt intake with disputed-line review, the weekly audit, recipes with stock matching, cooking mode that steps the stock down, the week menu, stores with price comparison, the eating log, receipts, and settings.
 
-Not yet: GitHub sync, receipt scanning (QR and photo), the weekly audit, recipes.
+Still to do: point it at a real GitHub repo and check that the tax service actually publishes line items for the shops you use. Until then the scan screen offers a demonstration receipt so the whole pipeline can be seen without any setup.
 
 First run seeds demo data so the interface can be judged before a single receipt exists.
 

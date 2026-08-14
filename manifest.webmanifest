@@ -1,0 +1,20 @@
+{
+  "name": "Кухня",
+  "short_name": "Кухня",
+  "description": "Список покупок, который сам знает, что кончилось",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fcfaf2",
+  "theme_color": "#1c3327",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

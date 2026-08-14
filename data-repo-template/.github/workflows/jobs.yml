@@ -1,0 +1,54 @@
+name: kitchen jobs
+
+# The app cannot reach third-party origins from a browser, so it drops a job file
+# into Задания/вход and this workflow answers it in Задания/выход.
+
+on:
+  push:
+    paths:
+      - "Задания/вход/**.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kitchen-jobs
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install OCR
+        run: |
+          if ls Задания/вход/*.json >/dev/null 2>&1 && grep -l '"receipt-ocr"' Задания/вход/*.json >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-ukr tesseract-ocr-rus
+          fi
+
+      - name: Install Python deps
+        run: pip install --quiet requests beautifulsoup4 lxml pillow pytesseract
+
+      - name: Run pending jobs
+        run: python scripts/run_jobs.py
+
+      - name: Commit answers
+        run: |
+          git config user.name "kitchen-bot"
+          git config user.email "kitchen-bot@users.noreply.github.com"
+          git add -A "Задания"
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+          else
+            git commit -m "kitchen: ответы на задания"
+            git push
+          fi

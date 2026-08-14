@@ -1,14 +1,36 @@
 // Cache-first shell so the shopping list survives a dead signal in the store.
 
-const CACHE = "kitchen-v1";
+const CACHE = "kitchen-v2";
 const SHELL = [
   "./",
   "./index.html",
   "./app.css",
   "./app.js",
-  "./lib/model.js",
-  "./lib/store.js",
   "./manifest.webmanifest",
+  "./icons/icon.svg",
+  "./lib/dom.js",
+  "./lib/state.js",
+  "./lib/store.js",
+  "./lib/model.js",
+  "./lib/recipes.js",
+  "./lib/planning.js",
+  "./lib/github.js",
+  "./lib/sync.js",
+  "./lib/receipt.js",
+  "./lib/vault.js",
+  "./screens/list.js",
+  "./screens/stock.js",
+  "./screens/item.js",
+  "./screens/scan.js",
+  "./screens/audit.js",
+  "./screens/recipes.js",
+  "./screens/recipe.js",
+  "./screens/cook.js",
+  "./screens/menu.js",
+  "./screens/stores.js",
+  "./screens/tracking.js",
+  "./screens/receipts.js",
+  "./screens/settings.js",
 ];
 
 self.addEventListener("install", (e) => {

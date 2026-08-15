@@ -127,6 +127,8 @@ function renderSyncStatus() {
 }
 
 let mounted = null;
+let previous = null;
+let previousArg = null;
 
 function render() {
   const state = get();
@@ -138,9 +140,23 @@ function render() {
   if (mounted && mounted !== current.name) SCREENS[mounted].leave?.();
   mounted = current.name;
 
+  // Every tap rebuilds the screen, and the scroller dies with it. Ticking five
+  // items in the meat aisle meant scrolling back five times, one-handed, with a
+  // trolley — so the position is carried across a re-render of the same screen.
+  const sameScreen = previous === current.name && previousArg === current.arg;
+  const keep = sameScreen ? [...stage.querySelectorAll(".body, .table, .feed, .inspector")].map((el) => el.scrollTop) : null;
+
   stage.innerHTML = screen.render(state, current.arg);
-  stage.scrollTop = 0;
+
+  if (keep) {
+    [...stage.querySelectorAll(".body, .table, .feed, .inspector")].forEach((el, i) => {
+      if (keep[i]) el.scrollTop = keep[i];
+    });
+  }
+
   screen.mount?.(stage, state, current.arg);
+  previous = current.name;
+  previousArg = current.arg;
 
   renderNav(state);
   renderSyncStatus();

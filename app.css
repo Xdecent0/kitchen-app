@@ -107,10 +107,14 @@ button {
 
 /* ---------- shell ---------- */
 
+/* Fixed height, not minimum: with min-height the whole page scrolls, so the
+   footer actions and the tab bar drift off the top of a long list — exactly
+   what a person holding a trolley cannot chase. The body scrolls instead. */
 .app {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .screen {
@@ -1503,6 +1507,14 @@ button {
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  /* Seven tabs do not fit 375px, and without snapping the first one drifts
+     half off the left edge — the one tab that must always be reachable. */
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+}
+
+.tabs-scroll .tab {
+  scroll-snap-align: start;
 }
 
 .tabs-scroll::-webkit-scrollbar {

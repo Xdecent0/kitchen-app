@@ -38,9 +38,11 @@ def fetch_receipt_qr(payload: dict) -> dict:
     res.raise_for_status()
 
     body = res.text
-    if body.lstrip().startswith("{"):
-        return parse_receipt_json(res.json())
-    return parse_receipt_html(body)
+    parsed = parse_receipt_json(res.json()) if body.lstrip().startswith("{") else parse_receipt_html(body)
+    # The source identifies the receipt, so scanning the same QR twice can be
+    # refused instead of doubling the shelf and the month's spend.
+    parsed["source"] = url
+    return parsed
 
 
 def parse_receipt_json(data: dict) -> dict:
@@ -61,14 +63,15 @@ def parse_receipt_json(data: dict) -> dict:
             {
                 "name": str(name).strip(),
                 "qty": normalize_qty(raw.get("quantity") or raw.get("qty")),
-                "price": normalize_price(raw.get("sum") or raw.get("price") or raw.get("total")),
+                "price": normalize_price(raw.get("sum") or raw.get("price") or raw.get("total"), minor_units=True),
             }
         )
 
     return {
         "lines": lines,
         "store": (doc.get("user") or doc.get("retailPlace") or doc.get("seller") or "магазин"),
-        "total": normalize_price(doc.get("totalSum") or doc.get("total")),
+        "total": normalize_price(doc.get("totalSum") or doc.get("total"), minor_units=True),
+        "at": receipt_date(doc),
     }
 
 
@@ -101,9 +104,33 @@ def parse_receipt_html(body: str) -> dict:
     return {"lines": lines, "store": store or "магазин", "total": None}
 
 
+ISO_DATE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+DMY_DATE = re.compile(r"(\d{2})[.\-/](\d{2})[.\-/](\d{4})")
+
+
+def receipt_date(doc: dict) -> str | None:
+    """When the receipt was actually issued.
+
+    The screen promises "сроки посчитаны от даты чека", so defaulting to today
+    made that sentence false for anything scanned a day late.
+    """
+    for key in ("dateTime", "date", "created_at", "fiscalDate", "timestamp"):
+        raw = doc.get(key)
+        if not raw:
+            continue
+        text = str(raw)
+        iso = ISO_DATE.search(text)
+        if iso:
+            return f"{iso.group(1)}-{iso.group(2)}-{iso.group(3)}"
+        dmy = DMY_DATE.search(text)
+        if dmy:
+            return f"{dmy.group(3)}-{dmy.group(2)}-{dmy.group(1)}"
+    return None
+
+
 def looks_like_total(text: str) -> bool:
     lowered = text.lower()
-    return any(word in lowered for word in ("итого", "сума", "сумма", "разом", "к оплате", "решта", "сдача"))
+    return any(word in lowered for word in ("итого", "сума", "сумма", "разом", "к оплате", "решта", "сдача", "повернення", "возврат"))
 
 
 # --------------------------------------------------------------------------- #
@@ -271,14 +298,24 @@ def parse_iso_minutes(value) -> int | None:
 # shared helpers
 # --------------------------------------------------------------------------- #
 
-def normalize_price(value):
+def normalize_price(value, *, minor_units=False):
+    """Money as a number.
+
+    Fiscal APIs report whole minor units, so 89.00 arrives as 8900. Guessing by
+    magnitude got this wrong for everything under a hundred — milk came back as
+    8900 and was stored that way — so the caller states which it is.
+
+    The sign is kept: a refund line is a negative amount, and stripping the
+    minus turned returns into purchases.
+    """
     if value is None:
         return None
-    if isinstance(value, (int, float)):
-        # Fiscal APIs report kopecks; anything above a plausible rouble price is one.
-        return round(value / 100, 2) if value > 10000 else round(float(value), 2)
 
-    text = re.sub(r"[^\d,.]", "", str(value)).replace(",", ".")
+    if isinstance(value, (int, float)):
+        return round(value / 100, 2) if minor_units else round(float(value), 2)
+
+    text = re.sub(r"[^\d,.\-]", "", str(value)).replace(",", ".")
+    text = ("-" if text.startswith("-") else "") + text.lstrip("-")
     try:
         return round(float(text), 2)
     except ValueError:

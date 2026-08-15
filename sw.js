@@ -5,7 +5,7 @@
 // So the network wins whenever it answers, and the cache is the fallback —
 // which is exactly what "works in the store" actually requires.
 
-const CACHE = "kitchen-v7";
+const CACHE = "kitchen-v8";
 
 const SHELL = [
   "./",
@@ -71,18 +71,29 @@ self.addEventListener("fetch", (e) => {
   // serves max-age=600 — so the worker would happily hand back ten-minute-old
   // code it never asked the server about. "no-cache" revalidates by ETag:
   // a 304 when nothing changed, the new file the moment something did.
-  e.respondWith(
-    fetch(new Request(request, { cache: "no-cache" }))
-      .then((res) => {
+  // navigator.onLine stays true on one bar, so "offline" never fires and each
+  // shell file hangs until the network gives up — a white screen at the shop
+  // door with a perfectly good copy already in the cache. Answer from the cache
+  // if the network has not spoken in a moment; the fetch still finishes and
+  // refreshes the cache for next time.
+  const network = fetch(new Request(request, { cache: "no-cache" }))
+    .then((res) => {
         if (res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(request, copy));
         }
-        return res;
-      })
-      .catch(() =>
-        caches.match(request).then((hit) => hit ?? caches.match("./index.html"))
-      )
+      return res;
+    });
+
+  network.catch(() => {});
+
+  e.respondWith(
+    Promise.race([
+      network,
+      new Promise((resolve) => setTimeout(resolve, 1500)).then(() =>
+        caches.match(request).then((hit) => hit ?? network)
+      ),
+    ]).catch(() => caches.match(request).then((hit) => hit ?? caches.match("./index.html")))
   );
 });
 

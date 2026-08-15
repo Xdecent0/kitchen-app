@@ -16,6 +16,7 @@ let cursor = 0;
 let learned = [];
 let summary = null;
 let abort = null;
+let jobAbort = null;
 
 function reset() {
   stage = "camera";
@@ -251,7 +252,11 @@ export default {
     },
 
     cancel() {
+      // Without aborting the poll the receipt still lands a minute later, while
+      // the person is on another screen and believes they refused it.
       abort?.abort();
+      jobAbort?.abort();
+      jobAbort = null;
       reset();
       location.hash = "list";
     },
@@ -312,13 +317,31 @@ async function startJob(kind, submit, label) {
 
   try {
     const id = await submit();
-    const answer = await gh.awaitJob(id);
+    jobAbort = new AbortController();
+    const answer = await gh.awaitJob(id, { signal: jobAbort.signal });
     if (answer.error) throw new Error(answer.error);
-    acceptLines(answer.lines ?? [], { store: answer.store ?? "магазин", total: answer.total ?? null });
+
+    // Scanning the same QR twice — or the second phone scanning it — used to add
+    // a second receipt, second shelf entries and a doubled month.
+    if (answer.source && get().receipts.some((r) => r.source === answer.source)) {
+      toast("Этот чек уже разобран", "alarm");
+      reset();
+      touch();
+      return;
+    }
+
+    acceptLines(answer.lines ?? [], {
+      store: answer.store ?? "магазин",
+      total: answer.total ?? null,
+      at: answer.at ?? null,
+      source: answer.source ?? null,
+    });
   } catch (err) {
-    toast(`Чек не разобрался: ${err.message}`, "alarm");
+    if (err.message !== "отменено") toast(`Чек не разобрался: ${err.message}`, "alarm");
     reset();
     touch();
+  } finally {
+    jobAbort = null;
   }
 }
 
@@ -341,7 +364,10 @@ function acceptLines(rawLines, meta) {
 /** Write everything the receipt produced: stock, list removals, learned rules, history. */
 function finishReceipt() {
   const meta = job?.meta ?? { store: "магазин", total: null };
-  const boughtAt = M.today();
+  // The summary says "сроки посчитаны от даты чека", so use it when the till
+  // gave one — a receipt scanned a day late would otherwise date from today.
+  const stamped = meta.at ? M.today(Date.parse(meta.at)) : null;
+  const boughtAt = Number.isFinite(stamped) ? stamped : M.today();
   const lines = [...parsed.accepted, ...queue.filter((l) => l.product)];
   let listRemoved = 0;
 
@@ -368,6 +394,7 @@ function finishReceipt() {
     s.receipts.unshift({
       id: uid("rc"),
       store: meta.store,
+      source: meta.source ?? null,
       at: boughtAt,
       total: meta.total,
       lines: lines.map((l) => ({ product: l.product, qty: l.qty, price: l.price })),

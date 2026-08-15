@@ -1,13 +1,13 @@
 // Router and chrome. Screens own their markup; this file decides which one is on
 // screen, keeps the nav honest, and funnels every click to the right handler.
 
-import { $, html, raw, icon, toast, wide } from "./lib/dom.js";
+import { $, html, raw, icon, toast, wide, setCurrency } from "./lib/dom.js";
 import { get, subscribe } from "./lib/state.js";
-import { demoState } from "./lib/store.js";
+import { demoState, isFresh, stripDemo } from "./lib/store.js";
 import { replace } from "./lib/state.js";
 import * as M from "./lib/model.js";
 import * as gh from "./lib/github.js";
-import { sync, syncing } from "./lib/sync.js";
+import { sync, syncing, autoSync } from "./lib/sync.js";
 
 import list from "./screens/list.js";
 import stock from "./screens/stock.js";
@@ -51,12 +51,19 @@ const NAV = [
 
 let current = { name: "list", arg: null };
 
-/* First run has nothing to judge the interface by, so seed the demo once. */
+/* First run has nothing to judge the interface by, so seed the demo once —
+   keyed on "nothing was ever saved", not on "the arrays are empty". Keyed on
+   emptiness, a deliberate "start clean" was undone by the next reload. */
 {
   const s = get();
-  if (!s.stock.length && !s.list.length && !s.receipts.length) {
+  if (isFresh() && !s.stock.length && !s.list.length && !s.receipts.length) {
     replace({ ...demoState(M.today()), recipes: s.recipes, stores: s.stores }, "seed");
+  } else if (s.demo && s.receipts.some((r) => !String(r.id).startsWith("rc_"))) {
+    // A real receipt landed on top of the demo: drop the invented rows rather
+    // than making the person choose between their data and a working sync.
+    replace(stripDemo(s), "demo.strip");
   }
+  setCurrency(get().currency);
 }
 
 function parseHash() {
@@ -149,9 +156,23 @@ window.addEventListener("hashchange", () => {
   render();
 });
 
-subscribe(() => render());
-window.addEventListener("online", renderSyncStatus);
+subscribe(() => {
+  setCurrency(get().currency);
+  render();
+});
+/* The queue has to leave on its own: the shop is the last place anyone opens
+   settings, and until it does, every per-entry merge runs empty. */
+function tryAutoSync() {
+  const started = autoSync(get());
+  if (started) started.then(renderSyncStatus);
+  renderSyncStatus();
+}
+
+window.addEventListener("online", tryAutoSync);
 window.addEventListener("offline", renderSyncStatus);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") tryAutoSync();
+});
 
 /* Phone and desktop are different structures, not the same one restyled,
    so crossing the breakpoint has to re-render rather than reflow. */
@@ -236,6 +257,7 @@ const GLOBAL_ACTIONS = {
 };
 
 applyNavMode(localStorage.getItem(NAV_KEY) === "1");
+$(".app").dataset.feed = localStorage.getItem("kitchen.feed.off") === "1" ? "off" : "on";
 
 current = parseHash();
 render();

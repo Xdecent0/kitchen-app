@@ -116,6 +116,35 @@ test("продукт становится нужен, когда просроч�
   assert.match(M.dueReason("Молоко", history, T0), /берёшь каждые 3 дня/);
 });
 
+test("подтверждение «ещё есть» замолкает на цикл, а не навсегда", () => {
+  // Without this the audit asks the same question every week while its summary
+  // claims the forecast moved.
+  const history = { Молоко: [day(12), day(9), day(6), day(3)] };
+  assert.equal(M.isDue("Молоко", history, T0), true);
+  assert.equal(M.isDue("Молоко", history, T0, { Молоко: day(1) }), false, "подтвердили вчера");
+  assert.equal(M.isDue("Молоко", history, T0, { Молоко: day(5) }), true, "цикл прошёл — спрашиваем снова");
+});
+
+test("сезонный продукт не всплывает через полгода", () => {
+  // A watermelon bought every four days in July must not arrive in December
+  // announcing that it ran out 124 days ago.
+  const history = { Арбуз: [day(160), day(156), day(152), day(148)] };
+  assert.equal(M.isDue("Арбуз", history, T0), false);
+});
+
+test("пропущенная строка чека не считается добавленной", async () => {
+  const { summarize } = await import("../lib/receipt.js");
+  const parsed = {
+    accepted: [{ product: "Молоко" }, { product: "Хлеб" }],
+    disputed: [{ product: "Щербет" }, { raw: "ЩЕРБЕТ", product: null }],
+    discarded: [{ product: null }],
+  };
+  const s = summarize(parsed, { listRemoved: 0, learned: [] });
+
+  assert.equal(s.added, 3, "две принятые плюс одна подтверждённая");
+  assert.equal(s.discarded, 2, "пропущенная уходит к отброшенным");
+});
+
 /* ------------------------------------------------------------------- list */
 
 test("список раскладывается по отделам в порядке обхода зала", () => {
@@ -217,6 +246,35 @@ test("слияние идёт по позициям: двое в магазин�
   assert.equal(merged.length, 3);
   assert.equal(merged.find((e) => e.id === "a").done, true, "выигрывает более поздняя отметка");
   assert.ok(merged.find((e) => e.id === "c"), "чужая позиция не теряется");
+});
+
+test("слияние не отменяет чужую покупку и не воскрешает удалённое", async () => {
+  // Whole-record last-write-wins lost real purchases: he ticks "взял" at noon,
+  // I edit the quantity at one, my record wins entire and the tick vanishes.
+  const ticked = { id: "a", done: true, qty: "1 л", at: 100 };
+  const edited = { id: "a", qty: "2 л", at: 200 };
+  const [merged] = mergeById([edited], [ticked]);
+
+  assert.equal(merged.done, true, "покупка не отменяется правкой количества");
+  assert.equal(merged.qty, "2 л", "остальные поля берутся у более поздней записи");
+
+  const grave = { id: "b", deleted: true, at: 100 };
+  const touched = { id: "b", qty: "3", at: 300 };
+  const [afterGrave] = mergeById([touched], [grave]);
+  assert.equal(afterGrave.deleted, true, "надгробие переживает правку");
+});
+
+test("очередь уходит сама, но не на каждое дрожание сети", async () => {
+  const { shouldAutoSync } = await import("../lib/sync.js");
+  const base = { configured: true, demo: false, queued: 3, online: true, busy: false, lastAttempt: 0, now: 120000 };
+
+  assert.equal(shouldAutoSync(base), true);
+  assert.equal(shouldAutoSync({ ...base, configured: false }), false, "без репозитория некуда");
+  assert.equal(shouldAutoSync({ ...base, demo: true }), false, "демо не уезжает");
+  assert.equal(shouldAutoSync({ ...base, queued: 0 }), false, "нечего отправлять");
+  assert.equal(shouldAutoSync({ ...base, online: false }), false, "офлайн");
+  assert.equal(shouldAutoSync({ ...base, busy: true }), false, "обмен уже идёт");
+  assert.equal(shouldAutoSync({ ...base, lastAttempt: 100000 }), false, "минута не прошла");
 });
 
 test("история покупок объединяется, а не перезаписывается", () => {

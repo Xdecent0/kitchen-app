@@ -30,7 +30,7 @@ function buildCandidates(state) {
 
   for (const product of Object.keys(state.history)) {
     if (seen.has(product.toLowerCase())) continue;
-    if (!M.isDue(product, state.history, now)) continue;
+    if (!M.isDue(product, state.history, now, state.confirmed)) continue;
     const inStock = state.stock.find((i) => !i.deleted && !i.empty && i.product.toLowerCase().includes(product.toLowerCase()));
     out.push({ kind: "rhythm", id: uid("a"), product, item: inStock ?? null });
   }
@@ -187,9 +187,19 @@ function apply() {
         if (!already) {
           s.list.push({ id: uid("l"), product: entry.product, qty: "", done: false, from: "forecast", at: Date.now() });
         }
-      } else if (stockEntry) {
+      } else {
+        // "Still have it" has to be recorded even when nothing on the shelf
+        // matches, or the rhythm keeps asking the same question forever while
+        // the summary claims the forecast moved.
+        s.confirmed[entry.product] = now;
+
+        if (!stockEntry) continue;
         const lived = stockEntry.boughtAt ? M.daysBetween(stockEntry.boughtAt, now) : null;
-        const ref = s.shelf.find((e) => stockEntry.product.toLowerCase().includes(e.product));
+        // Longest match wins: "сыр" would otherwise stretch the shelf life of
+        // "сырок глазированный" and vice versa.
+        const ref = s.shelf
+          .filter((e) => stockEntry.product.toLowerCase().includes(e.product))
+          .sort((a, b) => b.product.length - a.product.length)[0];
         if (ref && lived && lived > ref.closed) ref.closed = lived;
         if (lived) stockEntry.shelfDays = Math.max(stockEntry.shelfDays ?? 0, lived + 2);
         stockEntry.at = Date.now();

@@ -247,7 +247,7 @@ export default {
       stage = "waiting";
       job = { kind: "demo", kindLabel: "демонстрационный чек", startedLabel: "без обращения наружу" };
       touch();
-      setTimeout(() => acceptLines(DEMO_LINES, { store: "Пятёрочка", total: 1842 }), 600);
+      setTimeout(() => acceptLines(DEMO_LINES, { store: "АТБ", total: 1842 }), 600);
     },
 
     cancel() {
@@ -262,6 +262,10 @@ export default {
     },
 
     skip() {
+      // Dropping the guess is the whole point of the button: without this the
+      // line still lands on the shelf and in the purchase history, and a few
+      // receipts later the list starts suggesting it.
+      queue[cursor] = { ...queue[cursor], product: null };
       cursor += 1;
       if (cursor >= queue.length) finishReceipt();
       else touch();
@@ -303,7 +307,7 @@ async function startJob(kind, submit, label) {
 
   if (!gh.isConfigured()) {
     toast("Репозиторий не подключён — разбираю демонстрационный чек");
-    return acceptLines(DEMO_LINES, { store: "Пятёрочка", total: 1842 });
+    return acceptLines(DEMO_LINES, { store: "АТБ", total: 1842 });
   }
 
   try {

@@ -327,10 +327,9 @@ button {
 
 .aisle {
   padding: 16px var(--pad) 6px;
-  font-size: var(--t-label);
-  letter-spacing: 0.12em;
+  font-size: var(--t-meta);
+  font-weight: 600;
   color: var(--ink-4);
-  text-transform: uppercase;
 }
 
 /* ---------- rows ---------- */
@@ -1510,7 +1509,37 @@ button {
   display: none;
 }
 
-.tabs-foot,
+/* The shop is the only place the list is used for real, so the phone needs
+   the sync status and a way into settings just as much as the desktop does. */
+.tabs-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  order: 1;
+  padding: 7px var(--pad) 7px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.tabs-foot .sync {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+}
+
+.tabs-foot .tab {
+  flex: none;
+  min-width: 0;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  justify-content: center;
+}
+
+.tabs-foot .tab-label {
+  display: none;
+}
+
 .rail {
   display: none;
 }
@@ -1616,6 +1645,13 @@ kbd {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+}
+
+.table > .aisle {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg);
 }
 
 .trow {
@@ -1801,20 +1837,62 @@ kbd {
   max-width: 34ch;
 }
 
+/* The feeder is a hint about the list, not its equal: it stays the narrowest
+   zone so the list — the point of the screen — is the widest. */
 .feedwrap {
-  width: 320px;
+  width: 260px;
   flex: none;
   border-right: 1px solid var(--line);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Three zones need roughly 1400px to breathe. Below that the suggestions
-   narrow first, and below 1200 they fold away entirely — the list itself is
-   the thing that must never be squeezed. */
-@media (max-width: 1400px) {
-  .feedwrap {
-    width: 264px;
-  }
+.app[data-feed="off"] .feedwrap {
+  width: 44px;
+}
+
+.app[data-feed="off"] .feed {
+  display: none;
+}
+
+.feed-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 10px var(--pad);
+  border-bottom: 1px solid var(--line-soft);
+  font-size: var(--t-meta);
+  color: var(--ink-4);
+  flex: none;
+}
+
+.app[data-feed="off"] .feed-toggle {
+  padding: 10px 0;
+  justify-content: center;
+}
+
+.app[data-feed="off"] .feed-toggle-text {
+  display: none;
+}
+
+.feed-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--on-dark);
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feed {
+  overflow-y: auto;
 }
 
 @media (max-width: 1200px) {
@@ -1834,17 +1912,15 @@ kbd {
   align-items: baseline;
   gap: 10px;
   padding: 14px var(--pad) 6px;
-  font-size: var(--t-label);
-  letter-spacing: 0.12em;
+  font-size: var(--t-meta);
+  font-weight: 600;
   color: var(--ink-4);
-  text-transform: uppercase;
 }
 
 .feed-head .linkbtn {
   font-size: var(--t-meta);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--ink-4);
+  font-weight: 400;
+  color: var(--ink-5);
 }
 
 .feed-row {

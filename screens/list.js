@@ -105,12 +105,21 @@ const SOURCES = [
   { key: "menu", title: "нет для меню недели", tone: "" },
 ];
 
+function feedToggle(total) {
+  return html`<button class="feed-toggle" type="button" data-act="feed"
+      aria-label="Свернуть предложения">
+    <span class="feed-toggle-text">Предлагаю</span>
+    <span class="feed-count">${total}</span>
+  </button>`;
+}
+
 function feeder(state) {
   const sources = T.candidates(state);
   const total = T.candidateCount(sources);
 
   if (!total) {
-    return html`<div class="feed">
+    return html`${raw(feedToggle(0))}
+    <div class="feed">
       <div class="feed-empty">
         <p class="prose">Предлагать нечего: ритм покупок соблюдён, ничего не горит, меню собрано из того, что есть.</p>
       </div>
@@ -136,7 +145,7 @@ function feeder(state) {
     </div>`;
   }).join("");
 
-  return html`<div class="feed">${raw(blocks)}</div>`;
+  return html`${raw(feedToggle(total))}<div class="feed">${raw(blocks)}</div>`;
 }
 
 function tripRow(row, state, index) {
@@ -329,6 +338,13 @@ export default {
       touch();
     },
 
+    feed() {
+      const app = document.querySelector(".app");
+      const off = app.dataset.feed !== "off";
+      app.dataset.feed = off ? "off" : "on";
+      localStorage.setItem("kitchen.feed.off", off ? "1" : "0");
+    },
+
     remove(el) {
       removeEntry(el.dataset.id);
     },
@@ -414,6 +430,20 @@ function toggleEntry(id) {
     entry.done = !entry.done;
     entry.takenBy = entry.done ? "me" : null;
     entry.at = Date.now();
+
+    // Not every receipt gets scanned, so the tick itself is evidence that the
+    // product was bought today — without it the forecast only ever learns from
+    // scans and keeps asking for what is already in the bag.
+    const today = M.today();
+    const seen = s.history[entry.product] ?? [];
+    if (entry.done) {
+      s.history[entry.product] = [...new Set([...seen, today])].sort((a, b) => a - b);
+      delete s.confirmed[entry.product];
+    } else {
+      s.history[entry.product] = seen.filter((d) => d !== today);
+      if (!s.history[entry.product].length) delete s.history[entry.product];
+    }
+
     return { kind: "list", id: entry.id };
   });
 }

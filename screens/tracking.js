@@ -64,7 +64,7 @@ export default {
           <p class="prose prose--muted">Эти продукты стоит держать всегда — по ним прогноз работает точнее всего.</p>
         </section>` : "")}
 
-        ${raw(adding ? addForm() : `<div class="pane"><button class="btn btn--grow" type="button" data-act="add">Записать приём пищи</button></div>`)}
+        ${raw(adding ? addForm(state) : `<div class="pane"><button class="btn btn--grow" type="button" data-act="add">Записать приём пищи</button></div>`)}
 
         <div class="aisle">последние ${window_} дней</div>
         ${raw(timeline)}
@@ -114,7 +114,7 @@ export default {
   },
 };
 
-function addForm() {
+function addForm(state) {
   return html`<section class="pane">
     <div class="head-row">
       <div class="label">Что съел</div>
@@ -132,7 +132,7 @@ function addForm() {
           ${raw(P.MEAL_SOURCES.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join(""))}
         </select>
         <label class="sr-only" for="meal-cost">Сколько стоило</label>
-        <input class="field field--qty" id="meal-cost" name="cost" type="number" min="0" step="10" placeholder="₽" inputmode="numeric">
+        <input class="field field--qty" id="meal-cost" name="cost" type="number" min="0" step="10" placeholder="${esc(state.currency)}" inputmode="numeric">
       </div>
       <button class="btn btn--grow" type="submit">Записать</button>
     </form>

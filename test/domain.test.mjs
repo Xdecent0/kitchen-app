@@ -283,13 +283,38 @@ test("история покупок объединяется, а не перез
   assert.deepEqual(merged["Хлеб"], [5]);
 });
 
-test("удаление переживает слияние, но не копится вечно", () => {
+test("надгробие живёт год, потому что синк ручной", () => {
+  // A second device used once a month would arrive with the row still alive and
+  // resurrect it, so tombstones have to outlast the gap between syncs — thirty
+  // days was shorter than that gap, not longer.
   const fresh = { id: "a", deleted: true, at: Date.now() };
-  const old = { id: "b", deleted: true, at: Date.now() - 40 * DAY };
-  const alive = { id: "c", at: Date.now() };
+  const twoMonths = { id: "b", deleted: true, at: Date.now() - 60 * DAY };
+  const ancient = { id: "c", deleted: true, at: Date.now() - 400 * DAY };
+  const alive = { id: "d", at: Date.now() };
 
-  const kept = dropTombstones([fresh, old, alive]);
-  assert.deepEqual(kept.map((e) => e.id), ["a", "c"]);
+  const kept = dropTombstones([fresh, twoMonths, ancient, alive]);
+  assert.deepEqual(kept.map((e) => e.id), ["a", "b", "d"]);
+});
+
+test("экспорт списка не выдумывает того, чего не знает", async () => {
+  const S = await import("../lib/share.js");
+  const entries = [
+    { id: "1", product: "Молоко", qty: "2 л", price: 89 },
+    { id: "2", product: "Хлеб", qty: "", price: null },
+    { id: "3", product: "Творог", qty: "", done: true, price: 212 },
+  ];
+
+  const checklist = S.render(entries, { currency: "₴" });
+  assert.match(checklist, /☐ Молоко · 2 л/);
+  assert.match(checklist, /☑ Творог/, "взятое уходит вниз отдельным блоком");
+  assert.ok(!checklist.includes("₴"), "в чек-листе цен нет");
+
+  const receipt = S.render(entries, { style: "receipt", currency: "₴", aisles: SEED_AISLES });
+  assert.match(receipt, /Молоко · 2 л · 89 ₴/);
+  assert.match(receipt, /^\s*Хлеб\s*$/m, "без известной цены строка идёт без неё");
+  assert.match(receipt, /Итого 89 ₴/, "итог считается только по известным ценам");
+
+  assert.equal(S.render([], {}), "Список покупок\n— пусто");
 });
 
 /* ------------------------------------------------------------------ vault */

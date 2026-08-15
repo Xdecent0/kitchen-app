@@ -12,11 +12,14 @@ import { commit, uid, touch } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import * as T from "../lib/trip.js";
 import { priceHistory } from "../lib/planning.js";
+import * as S from "../lib/share.js";
 
 const alive = (state) => state.list.filter((e) => !e.deleted);
 
-let cursor = 0;
+let cursor = -1;
 let selected = new Set();
+let sharing = false;
+let shareStyle = "checklist";
 
 /* ---------- shared pieces ---------- */
 
@@ -29,6 +32,45 @@ function reasonOf(entry, state) {
 function whoOf(entry, state) {
   if (!entry.takenBy || entry.takenBy === "me") return null;
   return state.people.find((p) => p.id === entry.takenBy)?.name ?? entry.takenBy;
+}
+
+/* ---------- share ---------- */
+
+function shareText(state) {
+  const plan = T.tripPlan(state);
+  const entries = S.withPrices(alive(state), plan);
+
+  return S.render(entries, {
+    style: shareStyle,
+    aisles: state.aisles,
+    currency: state.currency,
+    groups: plan.canSplit ? plan.groups : null,
+  });
+}
+
+function shareSheet(state) {
+  const text = shareText(state);
+
+  return html`<div class="sheet" role="dialog" aria-label="Поделиться списком">
+    <div class="sheet-head">
+      <h2 class="sheet-title">Поделиться</h2>
+      <button class="icon-btn icon-btn--sm" type="button" data-act="shareClose" aria-label="Закрыть">
+        ${raw(icon("i-close", { size: 18, stroke: "#1c3327" }))}
+      </button>
+    </div>
+
+    <div class="chips" role="group" aria-label="Вид списка">
+      ${raw(S.STYLES.map((s) => `<button class="chip" type="button" data-act="shareStyle" data-style="${s.key}" aria-pressed="${shareStyle === s.key}" title="${esc(s.hint)}">${esc(s.name)}</button>`).join(""))}
+    </div>
+
+    <pre class="sheet-preview" aria-label="Как это будет выглядеть">${text}</pre>
+
+    <div class="sheet-actions">
+      ${raw(S.canShare() ? `<button class="btn btn--grow" type="button" data-act="shareSend">Отправить</button>` : "")}
+      <button class="btn ${S.canShare() ? "btn--ghost" : "btn--grow"}" type="button" data-act="shareCopy">Скопировать</button>
+      <a class="btn btn--ghost" href="${S.telegramLink(text)}" target="_blank" rel="noopener">Telegram</a>
+    </div>
+  </div>`;
 }
 
 /* ---------- phone ---------- */
@@ -92,7 +134,9 @@ function phone(state) {
 
     <div class="foot">
       <a class="btn btn--grow" href="#scan">Сканировать чек</a>
-      <button class="btn btn--ghost" type="button" data-act="clearDone">Убрать взятое</button>
+      <button class="btn btn--ghost" type="button" data-act="share" aria-label="Поделиться списком">
+        ${raw(icon("i-share", { size: 20, stroke: "#1c3327" }))}
+      </button>
     </div>
   </main>`;
 }
@@ -171,7 +215,7 @@ function tripRow(row, state, index) {
 }
 
 function answerPanel(state, plan) {
-  const answer = T.tripAnswer(plan);
+  const answer = T.tripAnswer(plan, state.currency);
 
   return html`<div class="answer">
     <p class="answer-value">${answer.value}${raw(answer.unit ? `<span class="answer-unit">${esc(answer.unit)}</span>` : "")}</p>
@@ -214,7 +258,6 @@ function railContext(state, plan, focusedRow) {
   </div>
 
   <div class="insp-foot">
-    <a class="btn" href="#scan">Сканировать чек</a>
     <button class="btn btn--ghost" type="button" data-act="clearDone">Убрать взятое · ${plan.done.length}</button>
   </div>`;
 }
@@ -222,7 +265,7 @@ function railContext(state, plan, focusedRow) {
 function desk(state) {
   const plan = T.tripPlan(state);
   const rows = [...plan.pending.map((e) => wrap(e, plan)), ...plan.done.map((e) => wrap(e, plan))];
-  cursor = Math.min(cursor, Math.max(0, rows.length - 1));
+  cursor = cursor < 0 ? -1 : Math.min(cursor, rows.length - 1);
   const focusedRow = rows[cursor] ?? null;
 
   const grouped = plan.canSplit
@@ -259,6 +302,7 @@ function desk(state) {
           <span class="head-sub num">${plan.pending.length} ${M.plural(plan.pending.length, "позиция", "позиции", "позиций")} · ${plan.done.length} отмечено</span>
         </div>
         <span class="toolbar-gap"></span>
+        <button class="btn btn--ghost btn--sm" type="button" data-act="share">Поделиться</button>
         <a class="btn btn--ghost btn--sm" href="#scan">Сканировать чек</a>
       </div>
     </header>
@@ -294,12 +338,14 @@ export default {
   title: () => "Список",
 
   render(state) {
-    return wide.matches ? desk(state) : phone(state);
+    const screen = wide.matches ? desk(state) : phone(state);
+    return sharing ? screen + shareSheet(state) : screen;
   },
 
   leave() {
-    cursor = 0;
+    cursor = -1;
     selected.clear();
+    sharing = false;
   },
 
   keys(e, state) {
@@ -321,6 +367,12 @@ export default {
     if (e.key === "Backspace") {
       e.preventDefault();
       removeEntry(rows[cursor]?.id);
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cursor = -1;
+      touch();
     }
   },
 
@@ -336,6 +388,34 @@ export default {
     focus(el) {
       cursor = Number(el.dataset.index);
       touch();
+    },
+
+    share() {
+      sharing = true;
+      touch();
+    },
+
+    shareClose() {
+      sharing = false;
+      touch();
+    },
+
+    shareStyle(el) {
+      shareStyle = el.dataset.style;
+      touch();
+    },
+
+    async shareSend(_el, state) {
+      const result = await S.share(shareText(state));
+      if (result === "copied") toast("Скопировано — вставь куда нужно");
+      if (result === "failed") toast("Не вышло поделиться — скопируй руками", "alarm");
+      if (result === "shared") sharing = false;
+      touch();
+    },
+
+    async shareCopy(_el, state) {
+      const result = await S.copy(shareText(state));
+      toast(result === "copied" ? "Скопировано" : "Буфер недоступен", result === "copied" ? "calm" : "alarm");
     },
 
     feed() {

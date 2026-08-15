@@ -1797,6 +1797,80 @@ kbd {
   margin: 16px 18px;
 }
 
+/* ---------- share sheet ---------- */
+
+.sheet {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 30;
+  background: var(--bg);
+  border-top: 1px solid var(--line-firm);
+  border-radius: 22px 22px 0 0;
+  padding: 16px var(--pad) calc(20px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 82dvh;
+  box-shadow: 0 -18px 40px -24px rgba(28, 51, 39, 0.4);
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sheet-title {
+  margin: 0;
+  font-size: var(--t-lead);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* The preview is the actual text that will be sent, not an impression of it. */
+.sheet-preview {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: var(--r-field);
+  background: var(--surface);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: var(--t-meta);
+  line-height: 1.6;
+  color: var(--ink-2);
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sheet-actions .btn {
+  min-height: 48px;
+  padding: 13px 16px;
+  font-size: var(--t-body);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 900px) {
+  .sheet {
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    width: 520px;
+    border-radius: var(--r-card);
+    border: 1px solid var(--line-firm);
+    max-height: 76dvh;
+  }
+}
+
 /* ---------- desktop list: feeder, field, answer rail ---------- */
 
 /* The rail opens with the answer, not with a row of labels: one number the

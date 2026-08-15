@@ -5,7 +5,7 @@
 // So the network wins whenever it answers, and the cache is the fallback —
 // which is exactly what "works in the store" actually requires.
 
-const CACHE = "kitchen-v6";
+const CACHE = "kitchen-v7";
 
 const SHELL = [
   "./",
@@ -19,6 +19,7 @@ const SHELL = [
   "./lib/store.js",
   "./lib/model.js",
   "./lib/trip.js",
+  "./lib/share.js",
   "./lib/recipes.js",
   "./lib/planning.js",
   "./lib/github.js",

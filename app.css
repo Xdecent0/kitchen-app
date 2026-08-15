@@ -1773,6 +1773,26 @@ kbd {
   opacity: 0.55;
 }
 
+/* The cheapest cell is marked by weight and a hairline, not a coloured fill —
+   a tint in every row would turn the matrix into a heat map of nothing. */
+.tbest {
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent-deep);
+}
+
+.tonce {
+  font-size: var(--t-label);
+  color: var(--ink-5);
+  vertical-align: super;
+  margin-left: 2px;
+}
+
+.spark {
+  width: 100%;
+  height: 56px;
+  display: block;
+}
+
 .inspector {
   width: var(--inspector);
   flex: none;

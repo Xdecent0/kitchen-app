@@ -1,6 +1,12 @@
-// Cache-first shell so the shopping list survives a dead signal in the store.
+// Offline support for the shopping list, without freezing the app on old code.
+//
+// Cache-first looks right for a store aisle with no signal, but it also means a
+// deployed fix may never reach the phone: the cache answers first, forever.
+// So the network wins whenever it answers, and the cache is the fallback —
+// which is exactly what "works in the store" actually requires.
 
-const CACHE = "kitchen-v3";
+const CACHE = "kitchen-v4";
+
 const SHELL = [
   "./",
   "./index.html",
@@ -34,32 +40,46 @@ const SHELL = [
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches
+      .open(CACHE)
+      // reload skips the HTTP cache, so a fresh install never seeds itself stale.
+      .then((c) => c.addAll(SHELL.map((url) => new Request(url, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys()
+    caches
+      .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener("fetch", (e) => {
-  if (e.request.method !== "GET") return;
+  const { request } = e;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.origin !== location.origin) return;
 
   e.respondWith(
-    caches.match(e.request).then((hit) => {
-      if (hit) return hit;
-      return fetch(e.request)
-        .then((res) => {
-          if (res.ok && new URL(e.request.url).origin === location.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
-          }
-          return res;
-        })
-        .catch(() => caches.match("./index.html"));
-    })
+    fetch(request)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(request, copy));
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(request).then((hit) => hit ?? caches.match("./index.html"))
+      )
   );
+});
+
+self.addEventListener("message", (e) => {
+  if (e.data === "skipWaiting") self.skipWaiting();
 });

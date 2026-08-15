@@ -221,6 +221,25 @@ const GLOBAL_ACTIONS = {
 current = parseHash();
 render();
 
+/**
+ * Register the worker and say something when a new build lands. A silent update
+ * that only applies on the next cold start means the person keeps using the
+ * version that had the bug they just reported.
+ */
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
+  navigator.serviceWorker
+    .register("./sw.js")
+    .then((reg) => {
+      reg.addEventListener("updatefound", () => {
+        const fresh = reg.installing;
+        if (!fresh) return;
+
+        fresh.addEventListener("statechange", () => {
+          if (fresh.state === "installed" && navigator.serviceWorker.controller) {
+            toast("Обновление готово — перезагрузи страницу");
+          }
+        });
+      });
+    })
+    .catch(() => {});
 }

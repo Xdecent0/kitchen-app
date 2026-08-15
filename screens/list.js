@@ -113,8 +113,12 @@ export default {
         return { kind: "list", id: entry.id };
       });
 
-      form.reset();
-      form.querySelector('[name="product"]').focus();
+      // commit() re-renders the screen, so this form node is already detached —
+      // resetting and focusing it would silently do nothing and drop the caret
+      // on every single addition. Re-query the live one.
+      const live = document.querySelector('[data-act-submit="add"]');
+      live?.reset();
+      live?.querySelector('[name="product"]')?.focus();
     },
 
     clearDone(_el, state) {

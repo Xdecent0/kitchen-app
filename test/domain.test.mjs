@@ -11,7 +11,7 @@ import { sameProduct, findInStock, match, rank, stepDown, lineMatchesProduct } f
 import { purchaseRhythm } from "../lib/model.js";
 import { mergeById, mergeHistory, dropTombstones } from "../lib/sync.js";
 import { parseTable, parseShelf, parseSynonyms, parseRecipe } from "../lib/vault.js";
-import { priceHistory, bestStore, trackingSummary, weekStart } from "../lib/planning.js";
+import { priceHistory, bestStore, trackingSummary, weekStart, staples } from "../lib/planning.js";
 import { SEED_SHELF, SEED_SYNONYMS, SEED_JUNK, SEED_AISLES } from "../lib/store.js";
 
 const DAY = M.DAY;
@@ -313,6 +313,25 @@ test("демо-данные опознаются даже без флага", as
   assert.ok(looksLikeDemo({ stock: [{ id: "s1" }, { id: "s2" }], receipts: [{ id: "rc_1" }] }));
   assert.ok(!looksLikeDemo({ stock: [{ id: "s_a1b2" }], receipts: [{ id: "rc_x9" }] }));
   assert.ok(!looksLikeDemo({ stock: [], receipts: [] }));
+});
+
+test("опоры считают и записанное руками, и период", () => {
+  // Regression: only meals with a product list were counted, so the panel
+  // showed "what I cooked from recipes" while calling itself "what I eat" —
+  // and it ignored the period selector entirely.
+  const meals = [
+    { date: day(1), title: "Сырники", products: ["Творог", "Яйца"] },
+    { date: day(2), title: "Шаурма" },
+    { date: day(3), title: "Шаурма" },
+    { date: day(40), title: "Плов" },
+  ];
+
+  const week = staples(meals, { days: 7, now: T0 });
+  assert.equal(week.find((s) => s.product === "Шаурма").times, 2, "ручные записи считаются");
+  assert.ok(!week.some((s) => s.product === "Плов"), "вне периода не попадает");
+
+  const month = staples(meals, { days: 60, now: T0 });
+  assert.ok(month.some((s) => s.product === "Плов"), "период управляет выборкой");
 });
 
 test("неделя начинается с понедельника", () => {

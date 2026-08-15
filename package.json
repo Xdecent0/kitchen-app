@@ -6,6 +6,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "serve": "python -m http.server 8779 --directory ."
+    "serve": "python tools/devserver.py 8781"
   }
 }

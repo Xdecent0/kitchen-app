@@ -15,7 +15,7 @@ export default {
   render(state) {
     const now = M.today();
     const s = P.trackingSummary(state.meals, window_, now);
-    const top = P.staples(state.meals);
+    const top = P.staples(state.meals, { days: window_, now });
 
     const days = Array.from({ length: window_ }, (_, i) => now - (window_ - 1 - i) * M.DAY);
 

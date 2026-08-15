@@ -43,8 +43,13 @@ export default {
     const stock = alive(state);
     const now = M.today();
     const ranked = rank(state.recipes, stock, { maxMissing: filter === "all" ? 99 : 2, now });
-    const shown = filterRecipes(ranked, filter);
     const burning = stock.filter((i) => M.isBurning(i, now));
+
+    // Nothing spoiling is the normal state, and on that day the default filter
+    // used to open the screen empty — which reads as broken rather than calm.
+    const wanted = filterRecipes(ranked, filter);
+    const fellBack = filter === "burning" && !wanted.length && ranked.length > 0;
+    const shown = fellBack ? ranked : wanted;
 
     const body = !state.recipes.length
       ? html`<div class="empty">
@@ -68,7 +73,11 @@ export default {
         </div>
       </header>
 
-      ${raw(burning.length ? `<div class="notice notice--alarm">${esc(burning.slice(0, 2).map((b) => `${b.product} — ${M.expiryLabel(b)}`).join(", "))} · начнём с них</div>` : "")}
+      ${raw(burning.length
+        ? `<div class="notice notice--alarm">${esc(burning.slice(0, 2).map((b) => `${b.product} — ${M.expiryLabel(b)}`).join(", "))} · начнём с них</div>`
+        : fellBack
+          ? `<div class="notice">Ничего не горит — показываю всё, что собирается из того, что есть</div>`
+          : "")}
 
       <div class="body">${raw(body)}</div>
 

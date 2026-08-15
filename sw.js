@@ -5,7 +5,7 @@
 // So the network wins whenever it answers, and the cache is the fallback —
 // which is exactly what "works in the store" actually requires.
 
-const CACHE = "kitchen-v4";
+const CACHE = "kitchen-v5";
 
 const SHELL = [
   "./",
@@ -65,8 +65,12 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
 
+  // A plain fetch() here still goes through the HTTP cache, and GitHub Pages
+  // serves max-age=600 — so the worker would happily hand back ten-minute-old
+  // code it never asked the server about. "no-cache" revalidates by ETag:
+  // a 304 when nothing changed, the new file the moment something did.
   e.respondWith(
-    fetch(request)
+    fetch(new Request(request, { cache: "no-cache" }))
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

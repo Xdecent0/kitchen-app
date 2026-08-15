@@ -1510,7 +1510,8 @@ button {
   display: none;
 }
 
-.tabs-foot {
+.tabs-foot,
+.rail {
   display: none;
 }
 
@@ -1780,8 +1781,89 @@ kbd {
     border-top: 0;
     background: var(--ink);
     color: var(--on-dark);
-    padding: 18px 10px;
-    gap: 2px;
+    padding: 16px 8px 14px;
+    gap: 1px;
+    position: relative;
+    transition: width 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* The edge is the handle: a full-height strip that widens the hit area
+     without spending a row of the sidebar on a button. */
+  .rail {
+    display: block;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 12px;
+    padding: 0;
+  }
+
+  .rail-grip {
+    position: absolute;
+    top: 50%;
+    right: 3px;
+    width: 3px;
+    height: 34px;
+    margin-top: -17px;
+    border-radius: 2px;
+    background: rgba(244, 241, 230, 0.16);
+    transition: background 0.15s, height 0.15s;
+  }
+
+  .rail:hover .rail-grip,
+  .rail:focus-visible .rail-grip {
+    background: var(--accent);
+    height: 56px;
+    margin-top: -28px;
+  }
+
+  /* Collapsed: icons only. Labels are hidden rather than removed, so the
+     title attribute and the reading order stay intact. */
+  .app[data-nav="mini"] {
+    --sidebar: 64px;
+  }
+
+  .app[data-nav="mini"] .tab-label,
+  .app[data-nav="mini"] .brand-name,
+  .app[data-nav="mini"] .sync {
+    display: none;
+  }
+
+  .app[data-nav="mini"] .tabs {
+    padding-left: 10px;
+    padding-right: 10px;
+    align-items: center;
+  }
+
+  .app[data-nav="mini"] .brand {
+    padding: 0 0 14px;
+    justify-content: center;
+  }
+
+  .app[data-nav="mini"] .tab {
+    justify-content: center;
+    padding: 9px 0;
+    width: 44px;
+    position: relative;
+  }
+
+  .app[data-nav="mini"] .tab-badge {
+    position: absolute;
+    top: 3px;
+    right: 2px;
+    margin: 0;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10.5px;
+    background: var(--accent-deep);
+    color: var(--accent-ink);
+  }
+
+  .app[data-nav="mini"] .tabs-foot {
+    align-items: center;
+    padding-top: 10px;
   }
 
   .tabs-scroll {
@@ -1794,9 +1876,9 @@ kbd {
   .tabs-foot {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     margin-top: auto;
-    padding-top: 14px;
+    padding-top: 12px;
     border-top: 1px solid rgba(244, 241, 230, 0.12);
   }
 
@@ -1817,7 +1899,7 @@ kbd {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 0 8px 18px;
+    padding: 0 10px 14px;
   }
 
   .brand-mark {
@@ -1844,12 +1926,12 @@ kbd {
     min-width: 0;
     flex-direction: row;
     justify-content: flex-start;
-    gap: 11px;
-    padding: 10px 12px;
-    border-radius: 10px;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 9px;
     font-size: var(--t-body);
     color: var(--on-dark-2);
-    min-height: 42px;
+    min-height: 36px;
     position: static;
   }
 

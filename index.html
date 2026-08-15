@@ -39,7 +39,7 @@
 </svg>
 
 <div class="app">
-  <nav class="tabs" aria-label="Разделы">
+  <nav class="tabs" id="nav" aria-label="Разделы">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">К</span>
       <span class="brand-name">Кухня</span>
@@ -47,11 +47,15 @@
     <div class="tabs-scroll" data-tabs></div>
     <div class="tabs-foot">
       <span class="sync" data-sync-status hidden></span>
-      <a class="tab" href="#settings" data-route="settings">
+      <a class="tab" href="#settings" data-route="settings" title="Настройки">
         <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg>
-        <span>Настройки</span>
+        <span class="tab-label">Настройки</span>
       </a>
     </div>
+    <button class="rail" type="button" data-act="rail" aria-expanded="true" aria-controls="nav"
+            aria-label="Свернуть боковую панель">
+      <span class="rail-grip" aria-hidden="true"></span>
+    </button>
   </nav>
 
   <div class="stage" data-stage aria-live="polite"></div>

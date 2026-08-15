@@ -77,9 +77,10 @@ function renderNav(state) {
   $("[data-tabs]").innerHTML = NAV.map((entry) => {
     const n = badgeFor(entry.route, state);
     const on = current.name === entry.route;
-    return html`<a class="tab" href="#${entry.route}" data-route="${entry.route}"${raw(on ? ' aria-current="page"' : "")}>
+    const hint = n > 0 ? `${entry.label} · ${n}` : entry.label;
+    return html`<a class="tab" href="#${entry.route}" data-route="${entry.route}" title="${hint}"${raw(on ? ' aria-current="page"' : "")}>
       ${raw(icon(entry.icon))}
-      <span>${entry.label}</span>
+      <span class="tab-label">${entry.label}</span>
       ${raw(n > 0 ? `<span class="tab-badge">${n}</span>` : "")}
     </a>`;
   }).join("");
@@ -212,11 +213,29 @@ export async function runSync() {
   }
 }
 
+/* Sidebar width is a preference, so it outlives the session. */
+const NAV_KEY = "kitchen.nav.mini";
+
+function applyNavMode(mini) {
+  $(".app").dataset.nav = mini ? "mini" : "full";
+  const rail = $(".rail");
+  if (!rail) return;
+  rail.setAttribute("aria-expanded", String(!mini));
+  rail.setAttribute("aria-label", mini ? "Развернуть боковую панель" : "Свернуть боковую панель");
+}
+
 const GLOBAL_ACTIONS = {
   back: () => history.back(),
   go: (el) => go(el.dataset.to),
   sync: () => runSync(),
+  rail: () => {
+    const mini = localStorage.getItem(NAV_KEY) !== "1";
+    localStorage.setItem(NAV_KEY, mini ? "1" : "0");
+    applyNavMode(mini);
+  },
 };
+
+applyNavMode(localStorage.getItem(NAV_KEY) === "1");
 
 current = parseHash();
 render();

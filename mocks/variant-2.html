@@ -33,7 +33,7 @@ svg{display:block}
 
 /* ---------- page shell around the frames ---------- */
 
-.sheet{max-width:1440px;margin:0 auto;padding:44px 24px 80px}
+.sheet{width:1440px;margin:0 auto;padding:44px 0 80px}
 .masthead{border-bottom:1px solid var(--line-firm);padding-bottom:22px;margin-bottom:38px;display:grid;grid-template-columns:400px 1fr;gap:0 56px;align-items:end}
 .masthead h1{margin:0;font-size:var(--t-display);font-weight:600;letter-spacing:-.03em;line-height:1.05}
 .masthead .sub{margin:6px 0 0;font-size:var(--t-meta);color:var(--ink-5)}
@@ -46,11 +46,11 @@ svg{display:block}
 .cap-n{font-size:var(--t-label);color:var(--ink-5);min-width:22px;font-variant-numeric:tabular-nums}
 .cap-name{font-size:var(--t-item);font-weight:600;letter-spacing:-.01em}
 .cap-why{font-size:var(--t-meta);color:var(--ink-4);flex:1;line-height:1.4}
-.holder{overflow-x:auto}
+.holder{overflow-x:auto;box-shadow:inset 0 0 0 1px var(--line-firm)}
 
 /* ---------- application frame 1440x900 ---------- */
 
-.app{width:1440px;height:900px;display:flex;background:var(--bg);border:1px solid var(--line-firm);overflow:hidden}
+.app{width:1440px;height:900px;display:flex;background:var(--bg);overflow:hidden}
 
 .side{width:var(--sidebar);flex:none;background:var(--ink);color:var(--on-dark);display:flex;flex-direction:column;padding:18px 10px;gap:2px}
 .brand{display:flex;align-items:center;gap:10px;padding:0 8px 18px}
@@ -96,14 +96,13 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 .field{flex:1;min-height:0;overflow-y:auto}
 .ledger{width:100%}
 
-.trow{display:grid;grid-template-columns:var(--cols);gap:14px;align-items:center;padding:0 22px;height:44px;border-bottom:1px solid var(--line-soft);font-size:var(--t-body)}
+.trow{display:grid;grid-template-columns:var(--cols);gap:14px;align-items:center;padding:0 22px;height:42px;border-bottom:1px solid var(--line-soft);font-size:var(--t-body)}
 .trow--head{height:34px;position:sticky;top:0;z-index:2;background:var(--surface);border-bottom:1px solid var(--line);
   font-size:var(--t-label);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
 .trow--head .sorted{color:var(--ink);font-weight:600;display:inline-flex;align-items:center;gap:4px}
 .trow--head .sorted svg{stroke:var(--ink);fill:none;stroke-width:3;stroke-linecap:round}
 .trow--head .right .sorted{justify-content:flex-end;width:100%}
-.trow--sub{height:28px;font-size:var(--t-label);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-5);border-bottom:1px solid var(--line-soft);background:var(--bg)}
-.trow--tall{height:48px}
+.trow--sub{height:24px;font-size:var(--t-label);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-5);border-bottom:1px solid var(--line-soft);background:var(--bg)}
 .trow[data-focus="1"]{background:var(--surface);box-shadow:inset 3px 0 0 var(--ink)}
 .trow[data-burn="1"]{background:var(--alarm-bg)}
 .trow[data-taken="1"] .tname{text-decoration:line-through;font-weight:400;color:var(--ink-4)}
@@ -117,6 +116,8 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 .sect-act{margin-left:auto;font-size:var(--t-meta);color:var(--ink-4)}
 
 .tname{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Derived provenance columns sit one step below the identity columns. */
+.trow .dim.clip{font-size:var(--t-meta)}
 .why{font-size:var(--t-meta);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .why b{font-weight:600;color:var(--ink-2)}
 .why.burn b{color:var(--alarm-ink)}
@@ -131,7 +132,7 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 .meter[data-tone="bad"]>i{background:var(--alarm)}
 
 /* row detail — opens inside the row, indented under the name column */
-.detail{background:var(--surface);border-bottom:1px solid var(--line);padding:15px 22px 16px 70px;
+.detail{background:var(--surface);border-bottom:1px solid var(--line);padding:13px 22px 13px 70px;
   display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 32px}
 .detail--wide{grid-template-columns:1.1fr 1fr 1.2fr}
 .dt{font-size:var(--t-label);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-5);margin-bottom:6px}
@@ -139,7 +140,7 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 .dlist{display:flex;flex-direction:column;gap:3px}
 .drow{display:flex;justify-content:space-between;gap:14px;font-size:var(--t-meta);color:var(--ink-2);padding:2px 0}
 .dpair{display:grid;grid-template-columns:1fr 1fr;gap:2px 24px}
-.dacts{grid-column:1/-1;display:flex;align-items:center;gap:16px;margin-top:10px;padding-top:11px;border-top:1px solid var(--line);font-size:var(--t-meta);color:var(--ink-3)}
+.dacts{grid-column:1/-1;display:flex;align-items:center;gap:16px;margin-top:8px;padding-top:9px;border-top:1px solid var(--line);font-size:var(--t-meta);color:var(--ink-3)}
 .seg{display:flex;gap:6px;margin-top:2px}
 .seg-btn{padding:6px 11px;border-radius:var(--r-field);border:1px solid var(--line-firm);font-size:var(--t-meta)}
 .seg-btn[aria-pressed="true"]{background:var(--accent-deep);color:var(--accent-ink);border-color:var(--accent-deep);font-weight:600}
@@ -147,13 +148,13 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 /* ---------- sticky totals, full 1208 ---------- */
 
 .tote{flex:none;background:var(--surface);border-top:1px solid var(--line-firm)}
-.tote-sums{display:grid;grid-template-columns:var(--cols);gap:14px;padding:11px 22px 10px;align-items:end}
-.sum{display:flex;flex-direction:column;gap:1px;min-width:0}
-.sum b{font-size:var(--t-item);font-weight:600;letter-spacing:-.015em;font-variant-numeric:tabular-nums}
-.sum i{font-style:normal;font-size:var(--t-label);color:var(--ink-5);line-height:1.35}
+.tote-sums{display:grid;grid-template-columns:var(--cols);gap:14px;padding:9px 22px 8px;align-items:end}
+.sum{display:flex;flex-direction:column;gap:0;min-width:0}
+.sum b{font-size:var(--t-item);font-weight:600;letter-spacing:-.015em;font-variant-numeric:tabular-nums;line-height:1.2}
+.sum i{font-style:normal;font-size:var(--t-label);color:var(--ink-5);line-height:1.25}
 .sum--right{align-items:flex-end;text-align:right}
-.tote-line{display:flex;align-items:center;gap:18px;padding:10px 22px 11px;border-top:1px solid var(--line);font-size:var(--t-meta);color:var(--ink-3)}
-.tote-line p{margin:0;max-width:78ch;line-height:1.45}
+.tote-line{display:flex;align-items:center;gap:18px;padding:8px 22px 9px;border-top:1px solid var(--line);font-size:var(--t-meta);color:var(--ink-3)}
+.tote-line p{margin:0;max-width:92ch;line-height:1.4}
 .tote-acts{margin-left:auto;display:flex;align-items:center;gap:9px}
 .btn--sm{height:34px;padding:0 13px;font-size:var(--t-meta)}
 </style>
@@ -371,13 +372,13 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 
         <footer class="tote">
           <div class="tote-sums">
-            <span class="sum"><b class="num">1</b><i>из 6 взято</i></span>
-            <span class="sum"><b class="num">8</b><i>строк в ведомости</i></span>
+            <span class="sum"></span>
+            <span class="sum"><b class="num">8 строк</b><i>1 из 6 взято</i></span>
             <span class="sum"><b class="num">2 · 2 · 2 · 2</b><i>прогноз · рецепты · руками · предложено</i></span>
             <span class="sum"></span>
             <span class="sum"><b class="num">7 · 1</b><i>Пятёрочка · ВкусВилл</i></span>
-            <span class="sum sum--right"><b class="num">658 ₽</b><i>+126 ₽ с предложенным</i></span>
-            <span class="sum"><b class="num">1</b><i>человек в списке</i></span>
+            <span class="sum sum--right"><b class="num">658 ₽</b><i>к оплате</i></span>
+            <span class="sum"><b class="num">1</b><i>человек</i></span>
           </div>
           <div class="tote-line">
             <p>Сравнение цен открыто по двум продуктам из восьми — молоку и творогу; остальным магазин назначен по умолчанию, а не выбран. Двум строкам цену не с чего взять: батона и сметаны в чеках ещё не было.</p>
@@ -625,14 +626,14 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 
         <footer class="tote">
           <div class="tote-sums">
-            <span class="sum"><b class="num">2</b><i>выделено</i></span>
-            <span class="sum"><b class="num">11</b><i>позиций на складе</i></span>
-            <span class="sum"><b class="num">4 · 1 · 4 · 2</b><i>холод · мороз · полка · овощи</i></span>
             <span class="sum"></span>
+            <span class="sum"><b class="num">11 позиций</b><i>2 выделено</i></span>
+            <span class="sum"><b class="num">4·1·4·2</b><i>по зонам</i></span>
+            <span class="sum"><b class="num">10 из 11</b><i>остаток знаю</i></span>
             <span class="sum"><b class="num">2 горит</b><i>ещё 4 кончается</i></span>
-            <span class="sum"><b class="num">63%</b><i>срока в среднем</i></span>
+            <span class="sum"><b class="num">63%</b><i>срока</i></span>
             <span class="sum"><b class="num">7 из 11</b><i>привязано к чеку</i></span>
-            <span class="sum sum--right"><b class="num">1 159 ₽</b><i>лежит в еде</i></span>
+            <span class="sum sum--right"><b class="num">1 159 ₽</b><i>в еде</i></span>
             <span class="sum"><b class="num">9</b><i>позиций в блюдах</i></span>
           </div>
           <div class="tote-line">
@@ -711,7 +712,7 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 
             <div class="sect"><span class="sect-n">Книга</span><span class="sect-c num">4 блюда</span><span class="sect-act">маршрут чтения открывается отдельно</span></div>
 
-            <div class="trow trow--tall" role="row">
+            <div class="trow" role="row">
               <span class="tick" role="checkbox" aria-checked="false" aria-label="Выделить запеканку"></span>
               <span class="tname">Творожная запеканка</span>
               <span class="why">всё есть дома</span>
@@ -721,7 +722,7 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
               <span class="num">4 из 4</span>
             </div>
 
-            <div class="trow trow--tall" data-focus="1" role="row">
+            <div class="trow" data-focus="1" role="row">
               <span class="tick" role="checkbox" aria-checked="true" aria-label="Сырники выделены"><svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-check"/></svg></span>
               <span class="tname">Сырники</span>
               <span class="why">нет: <b>сметана</b> — уже в списке покупок</span>
@@ -762,7 +763,7 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
               </div>
             </div>
 
-            <div class="trow trow--tall" role="row">
+            <div class="trow" role="row">
               <span class="tick" role="checkbox" aria-checked="false" aria-label="Выделить омлет"></span>
               <span class="tname">Омлет с помидорами</span>
               <span class="why">всё есть дома</span>
@@ -772,7 +773,7 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
               <span class="num">3 из 3</span>
             </div>
 
-            <div class="trow trow--tall" role="row">
+            <div class="trow" role="row">
               <span class="tick" role="checkbox" aria-checked="false" aria-label="Выделить курицу с рисом"></span>
               <span class="tname">Курица с рисом</span>
               <span class="why">нет: <b>морковь</b></span>
@@ -839,13 +840,13 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 
         <footer class="tote">
           <div class="tote-sums">
-            <span class="sum"><b class="num">2</b><i>выделено</i></span>
-            <span class="sum"><b class="num">4</b><i>блюда в книге</i></span>
+            <span class="sum"></span>
+            <span class="sum"><b class="num">4 блюда</b><i>2 выделено</i></span>
             <span class="sum"><b class="num">2</b><i>готовы прямо сейчас</i></span>
             <span class="sum"><b class="num">2</b><i>спасают творог до завтра</i></span>
-            <span class="sum sum--right"><b class="num">110</b><i>минут на всё</i></span>
+            <span class="sum sum--right"><b class="num">110</b><i>минут</i></span>
             <span class="sum"><b class="num">10</b><i>порций</i></span>
-            <span class="sum"><b class="num">64 ₽</b><i>добрать до полной книги</i></span>
+            <span class="sum"><b class="num">64 ₽</b><i>добрать</i></span>
           </div>
           <div class="tote-line">
             <p>Творог, который пропадёт завтра, закрывают два блюда из четырёх: запеканка готова сейчас, сырникам не хватает сметаны — она уже в списке. Из 21 слота недели занято два.</p>
@@ -1068,10 +1069,10 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
         <footer class="tote">
           <div class="tote-sums">
             <span class="sum"></span>
-            <span class="sum"><b class="num">7</b><i>дней в окне</i></span>
-            <span class="sum"><b class="num">5</b><i>приёмов записано</i></span>
-            <span class="sum"><b class="num">60%</b><i>приёмов дома</i></span>
-            <span class="sum"><b class="num">1 · 1</b><i>заведение · доставка</i></span>
+            <span class="sum"><b class="num">7 дней</b><i>3 пустых</i></span>
+            <span class="sum"><b class="num">5</b><i>приёмов</i></span>
+            <span class="sum"><b class="num">60%</b><i>приёмов дома — 3 из 5 записанных</i></span>
+            <span class="sum"><b class="num">2</b><i>вне дома</i></span>
             <span class="sum"><b class="num">4 из 5</b><i>опор лежат на складе</i></span>
             <span class="sum sum--right"><b class="num">1 370 ₽</b><i>196 ₽ в день</i></span>
           </div>

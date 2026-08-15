@@ -20,7 +20,7 @@
 }
 *,*::before,*::after{box-sizing:border-box}
 body{
-  margin:0; background:#e7e3d6; color:var(--ink);
+  margin:0; background:var(--surface); color:var(--ink);
   font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
   font-size:var(--t-body); line-height:1.45; min-width:1440px;
 }
@@ -40,8 +40,8 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:defa
 .brief-v em{font-style:normal;color:var(--on-dark-2)}
 
 /* ---------- strap above every screen ---------- */
-.strap{width:1440px;margin:0 auto;padding:14px var(--pad);background:#e7e3d6;
-  display:flex;align-items:baseline;gap:16px;border-top:1px solid rgba(28,51,39,.14)}
+.strap{width:1440px;margin:0 auto;padding:16px var(--pad) 14px;background:var(--surface);
+  display:flex;align-items:baseline;gap:16px;border-top:1px solid var(--line-firm)}
 .strap-n{font-size:var(--t-item);font-weight:600;letter-spacing:-.01em;flex:none}
 .strap-p{font-size:var(--t-meta);color:var(--ink-3);flex:none}
 .strap-why{font-size:var(--t-meta);color:var(--ink-4);flex:1;min-width:0}
@@ -248,7 +248,7 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 .cal-row{display:grid;grid-template-columns:repeat(5,1fr) 14px repeat(2,1fr);gap:3px}
 .cal-h{font-size:var(--t-meta);color:var(--ink-4);padding:0 4px 4px}
 .cal-h[data-we]{color:var(--ink-5)}
-.cell{height:84px;border:1px solid var(--line-soft);border-radius:10px;padding:7px 8px;
+.cell{height:82px;border:1px solid var(--line-soft);border-radius:10px;padding:7px 8px;
   display:flex;flex-direction:column;gap:6px}
 .cell[data-out]{border-color:transparent}
 .cell[data-out] .cell-d{color:var(--ink-5);opacity:.45}
@@ -279,7 +279,7 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
 .fig{display:flex;flex-direction:column;gap:1px}
 .fig-n{font-size:var(--t-lead);font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .fig-t{font-size:var(--t-meta);color:var(--ink-4)}
-.staple{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft)}
+.staple{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-soft)}
 .staple:last-of-type{border-bottom:0}
 .staple-m{flex:1;min-width:0;display:flex;flex-direction:column;gap:0}
 .staple-n{font-size:var(--t-body);font-weight:500}
@@ -980,7 +980,7 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
             <div class="irow"><span>Самый дорогой день</span><span class="irow-t">13 авг · 890 ₽</span></div>
             <div class="irow"><span>Прошлая неделя</span><span class="irow-t">записей нет</span></div>
           </div>
-          <p class="prose prose--tight">Дельту к прошлой неделе не показываю: за 3–9 августа в логе ни одного приёма, сравнивать не с чем.</p>
+          <p class="prose prose--tight">Дельту не показываю: за 3–9 августа в логе пусто.</p>
         </div>
 
         <div class="blk">
@@ -1001,12 +1001,11 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--t-label);p
             <span class="staple-m"><span class="staple-n">Рис</span><span class="staple-w">1 раз · на складе, остаток не знаю</span></span>
             <button class="hold">держать</button>
           </div>
-          <p class="prose prose--tight">«Пицца» и «Столовая на работе» записаны руками и продуктами не являются — в опоры не идут. Ритм считаю с четырёх покупок, пока их меньше — пишу «раз» и не выдумываю частоту.</p>
+          <p class="prose prose--tight">«Пицца» и «Столовая» записаны руками — не продукты, в опоры не идут. Частоту считаю с четырёх покупок.</p>
         </div>
 
         <div class="rail-foot">
           <button class="btn btn--wide">Записать приём пищи</button>
-          <button class="btn btn--ghost btn--wide">Опоры → в список</button>
         </div>
       </aside>
     </div>

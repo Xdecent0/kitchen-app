@@ -1,7 +1,7 @@
 // Router and chrome. Screens own their markup; this file decides which one is on
 // screen, keeps the nav honest, and funnels every click to the right handler.
 
-import { $, html, raw, icon, toast } from "./lib/dom.js";
+import { $, html, raw, icon, toast, wide } from "./lib/dom.js";
 import { get, subscribe } from "./lib/state.js";
 import { demoState } from "./lib/store.js";
 import { replace } from "./lib/state.js";
@@ -151,6 +151,15 @@ window.addEventListener("hashchange", () => {
 subscribe(() => render());
 window.addEventListener("online", renderSyncStatus);
 window.addEventListener("offline", renderSyncStatus);
+
+/* Phone and desktop are different structures, not the same one restyled,
+   so crossing the breakpoint has to re-render rather than reflow. */
+wide.addEventListener("change", () => render());
+
+document.addEventListener("keydown", (e) => {
+  if (e.target?.closest?.("input, textarea, select")) return;
+  SCREENS[current.name].keys?.(e, get());
+});
 
 /* One delegated listener for every screen action. */
 document.addEventListener("click", (e) => {

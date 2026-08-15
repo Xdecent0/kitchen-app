@@ -1,6 +1,6 @@
 // Cache-first shell so the shopping list survives a dead signal in the store.
 
-const CACHE = "kitchen-v2";
+const CACHE = "kitchen-v3";
 const SHELL = [
   "./",
   "./index.html",

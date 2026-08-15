@@ -4,8 +4,7 @@
 import { html, raw, icon, esc, cap, fmtDate, fmtMoney, toast } from "../lib/dom.js";
 import { commit, uid } from "../lib/state.js";
 import * as M from "../lib/model.js";
-import { rank } from "../lib/recipes.js";
-import { LEVELS } from "../lib/recipes.js";
+import { rank, LEVELS, lineMatchesProduct } from "../lib/recipes.js";
 import { ZONE_ICON, ZONES } from "./stock.js";
 
 const find = (state, id) => state.stock.find((i) => i.id === id);
@@ -25,7 +24,7 @@ export default {
     const now = M.today();
     const f = M.freshness(entry, now);
     const burning = M.isBurning(entry, now);
-    const receipt = state.receipts.find((r) => (r.lines ?? []).some((l) => l.product === entry.product));
+    const receipt = state.receipts.find((r) => (r.lines ?? []).some((l) => lineMatchesProduct(l, entry.product)));
 
     const cookable = rank(state.recipes, [entry, ...state.stock.filter((i) => i.id !== entry.id && !i.deleted)], { now })
       .filter((r) => r.match.have.some((h) => h.item.id === entry.id))

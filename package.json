@@ -1,0 +1,11 @@
+{
+  "name": "kitchen-app",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Список покупок, который сам знает, что кончилось",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "serve": "python -m http.server 8779 --directory ."
+  }
+}

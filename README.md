@@ -47,8 +47,16 @@ Everything under `lib/` is domain logic that touches neither the DOM nor storage
 Any static server works; ES modules need HTTP rather than `file://`.
 
 ```bash
-python -m http.server 8778 --directory .
+npm run serve
 ```
+
+## Tests
+
+```bash
+npm test
+```
+
+33 cases over the pure domain modules. Every one is a bug that actually happened or a rule the interface leans on — Russian morphology in recipe matching, median purchase rhythm, mask ordering in receipt normalization, per-entry sync merges. No DOM, no network, no fixtures beyond the seed tables.
 
 ## State of things
 

@@ -51,6 +51,13 @@ export default {
           </details>
         </section>
 
+        ${raw(state.demo ? `<section class="pane pane--alarm">
+          <div class="label">Сейчас загружены демо-данные</div>
+          <p class="prose prose--alarm">Восемь позиций склада, шесть строк списка и три выдуманных чека — они нужны, чтобы приложение было на что посмотреть до первой закупки. Синхронизация с ними заблокирована: иначе выдуманный склад уедет в репозиторий и смешается с настоящим.</p>
+          <p class="prose">Справочники и рецепты из волта это не затрагивает — их можно тянуть прямо сейчас.</p>
+          <button class="btn btn--grow" type="button" data-act="startClean">Очистить и начать с нуля</button>
+        </section>` : "")}
+
         <section class="pane">
           <div class="head-row">
             <div class="label">Синхронизация</div>
@@ -192,6 +199,26 @@ export default {
       const s = get();
       replace({ ...demoState(M.today()), recipes: s.recipes, stores: s.stores, people: s.people }, "demo");
       toast("Демо-данные загружены");
+    },
+
+    /** Keeps what came from the vault, drops everything the app invented. */
+    startClean() {
+      const s = get();
+      replace(
+        {
+          ...structuredClone(EMPTY_STATE),
+          recipes: s.recipes,
+          shelf: s.shelf,
+          synonyms: s.synonyms,
+          junk: s.junk,
+          aisles: s.aisles,
+          stores: s.stores,
+          people: s.people,
+          rules: s.rules,
+        },
+        "clean"
+      );
+      toast("Демо-данные убраны · склад и список пусты");
     },
 
     wipe() {

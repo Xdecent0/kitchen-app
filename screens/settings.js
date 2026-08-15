@@ -1,6 +1,12 @@
-// Settings: the data repo, the people who share the list, and the reference tables.
+// Settings.
+//
+// Phone: a one-off form — paste the key and leave.
+// Desktop: a workbench. This is the machine sitting next to the vault and the
+// GitHub tab, and the only place to see what the app actually decides by:
+// which shelf lives, which till strings map to what, and what is stuck in the
+// outbox. So sections on the left, real tables in the middle, provenance right.
 
-import { html, raw, icon, esc, toast } from "../lib/dom.js";
+import { html, raw, icon, esc, toast, wide, fmtDate } from "../lib/dom.js";
 import { commit, uid, touch, get, replace } from "../lib/state.js";
 import { demoState, reset as resetStore, EMPTY_STATE } from "../lib/store.js";
 import * as M from "../lib/model.js";
@@ -10,106 +16,445 @@ import { parseShelf, parseSynonyms, parseAisles, parseRecipe } from "../lib/vaul
 
 let checking = false;
 let checkResult = null;
+let section = "connect";
+let cursor = -1;
+
+const SECTIONS = [
+  { key: "connect", name: "Подключение" },
+  { key: "sync", name: "Обмен" },
+  { key: "people", name: "Люди" },
+  { key: "shelf", name: "Сроки" },
+  { key: "synonyms", name: "Синонимы" },
+  { key: "aisles", name: "Отделы" },
+  { key: "rules", name: "Выучено из чеков" },
+  { key: "danger", name: "Опасная зона", apart: true },
+];
+
+function countOf(key, state) {
+  if (key === "sync") return state.queue.length;
+  if (key === "people") return state.people.length;
+  if (key === "shelf") return state.shelf.length;
+  if (key === "synonyms") return state.synonyms.length;
+  if (key === "aisles") return state.aisles.length;
+  if (key === "rules") return Object.keys(state.rules).length;
+  return null;
+}
+
+/* ---------- pieces shared by both layouts ---------- */
+
+function connectForm(cfg, { compact = false } = {}) {
+  return html`<form class="stack${compact ? " stack--tight" : ""}" data-act-submit="connect">
+    <label class="fieldset">
+      <span class="fieldset-label">Репозиторий</span>
+      <input class="field" name="repo" value="${cfg.repo ?? ""}" placeholder="логин/kitchen-data" autocomplete="off" spellcheck="false" required>
+    </label>
+    <label class="fieldset">
+      <span class="fieldset-label">Ключ доступа</span>
+      <input class="field" name="token" type="password" value="${cfg.token ? "••••••••••••" : ""}" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
+    </label>
+    <label class="fieldset">
+      <span class="fieldset-label">Ветка</span>
+      <input class="field field--qty" name="branch" value="${cfg.branch ?? "main"}" autocomplete="off" spellcheck="false">
+    </label>
+    <button class="btn" type="submit" ${raw(checking ? "disabled" : "")}>${checking ? "Проверяю…" : cfg.token ? "Проверить снова" : "Подключить"}</button>
+  </form>`;
+}
+
+function demoWarning(state) {
+  if (!state.demo) return "";
+  return html`<section class="pane pane--alarm">
+    <div class="label">Сейчас загружены демо-данные</div>
+    <p class="prose prose--alarm">Восемь позиций склада, шесть строк списка и три выдуманных чека — они нужны, чтобы приложение было на что посмотреть до первой закупки. Синхронизация с ними заблокирована: иначе выдуманный склад уедет в репозиторий и смешается с настоящим.</p>
+    <button class="btn" type="button" data-act="startClean">Очистить и начать с нуля</button>
+  </section>`;
+}
+
+/* ---------- phone ---------- */
+
+function phone(state) {
+  const cfg = gh.config();
+  const others = state.people.filter((p) => !p.self);
+
+  return html`<main class="screen">
+    <header class="head"><h1>Настройки</h1></header>
+
+    <div class="body">
+      ${raw(demoWarning(state))}
+
+      <section class="pane">
+        <div class="label">Репозиторий данных</div>
+        <p class="prose">Приложение хранит склад, список и справочники в твоём приватном репозитории на GitHub. Ключ доступа живёт только в этом браузере и никуда больше не уходит.</p>
+        ${raw(connectForm(cfg))}
+        ${raw(checkResult ? `<p class="prose ${checkResult.ok ? "" : "prose--alarm"}">${esc(checkResult.text)}</p>` : "")}
+        <details class="note">
+          <summary>Как сделать ключ</summary>
+          <p class="prose">На GitHub: Settings → Developer settings → Personal access tokens → Fine-grained tokens. Доступ дай только репозиторию с данными, права Contents: Read and write. Ключ создаёшь и вставляешь ты сам; я его не вижу и не запрашиваю.</p>
+        </details>
+      </section>
+
+      <section class="pane">
+        <div class="head-row">
+          <div class="label">Синхронизация</div>
+          <span class="head-sub num">${state.queue.length ? `${state.queue.length} правок в очереди` : "очередь пуста"}</span>
+        </div>
+        <p class="prose">${state.syncedAt ? `Последний обмен: ${new Date(state.syncedAt).toLocaleString("ru")}.` : "Обмена ещё не было."} Правки копятся офлайн и уходят при первой возможности.</p>
+        <div class="rowbtns">
+          <button class="btn btn--grow" type="button" data-act="syncNow" ${raw(gh.isConfigured() ? "" : "disabled")}>Синхронизировать</button>
+          <button class="btn btn--ghost" type="button" data-act="pullRefs" ${raw(gh.isConfigured() ? "" : "disabled")}>Обновить справочники</button>
+        </div>
+      </section>
+
+      <section class="pane">
+        <div class="label">Кто ещё видит список</div>
+        <p class="prose">Второй человек добавляется коллаборатором того же приватного репозитория.</p>
+        ${raw(others.length
+          ? others.map((p) => `<div class="ing" data-have="1"><span class="ing-name">${esc(p.name)}</span><button class="chip" type="button" data-act="removePerson" data-id="${esc(p.id)}">убрать</button></div>`).join("")
+          : `<p class="prose prose--muted">Пока список видишь только ты.</p>`)}
+        <form class="addbar" data-act-submit="addPerson">
+          <input class="field" name="name" placeholder="Имя" aria-label="Имя человека" autocomplete="off" required>
+          <button class="icon-btn" type="submit" aria-label="Добавить человека">${raw(icon("i-plus", { size: 22, stroke: "#1c3327" }))}</button>
+        </form>
+      </section>
+
+      <section class="pane">
+        <div class="label">Справочники</div>
+        <p class="prose">Сроки, синонимы касс и порядок отделов лежат markdown-таблицами в волте. Правь их в Obsidian, приложение подтянет.</p>
+        <div class="figures figures--tight">
+          <div class="figure"><span class="figure-n num">${state.shelf.length}</span><span class="figure-t">строк в сроках</span></div>
+          <div class="figure"><span class="figure-n num">${state.synonyms.length}</span><span class="figure-t">масок синонимов</span></div>
+          <div class="figure"><span class="figure-n num">${Object.keys(state.rules).length}</span><span class="figure-t">правил из чеков</span></div>
+        </div>
+      </section>
+
+      <section class="pane pane--alarm">
+        <div class="label">Опасная зона</div>
+        <p class="prose prose--alarm">Сброс стирает всё, что накопилось в этом браузере. Если репозиторий подключён, данные вернутся при следующей синхронизации; если нет, исчезнут насовсем.</p>
+        <div class="rowbtns">
+          <button class="btn btn--ghost" type="button" data-act="loadDemo">Загрузить демо-данные</button>
+          <button class="btn btn--ghost btn--danger" type="button" data-act="wipe">Стереть всё</button>
+        </div>
+      </section>
+    </div>
+  </main>`;
+}
+
+/* ---------- desktop ---------- */
+
+/** Same placeholder as the stock table: an unknown cell, not prose punctuation. */
+const none = '<span class="tnone" aria-label="нет">–</span>';
+
+function rows(state) {
+  if (section === "shelf") {
+    return state.shelf.map((e, i) => ({
+      id: `shelf-${i}`,
+      cells: [e.product, e.zone, e.closed ? `${e.closed} дн` : none, e.opened ? `${e.opened} дн` : none],
+      html: [false, false, !e.closed, !e.opened],
+      detail: e,
+    }));
+  }
+  if (section === "synonyms") {
+    return state.synonyms.map((e, i) => ({ id: `syn-${i}`, cells: [e.mask, e.product], detail: e }));
+  }
+  if (section === "aisles") {
+    return state.aisles.map((e, i) => ({
+      id: `aisle-${i}`,
+      cells: [String(e.order), e.name, e.items.slice(0, 6).join(", ")],
+      detail: e,
+    }));
+  }
+  if (section === "rules") {
+    return Object.entries(state.rules).map(([raw_, product], i) => ({
+      id: `rule-${i}`,
+      cells: [raw_, product],
+      detail: { raw: raw_, product },
+    }));
+  }
+  if (section === "sync") {
+    return state.queue.map((op) => ({
+      id: op.id,
+      cells: [op.kind, op.bulk ? "пачкой" : op.id?.slice(0, 8) ?? "", new Date(op.at).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })],
+      detail: op,
+    }));
+  }
+  if (section === "people") {
+    return state.people.map((p) => ({ id: p.id, cells: [p.name, p.self ? "это я" : "коллаборатор"], detail: p }));
+  }
+  return [];
+}
+
+const HEADS = {
+  shelf: ["продукт", "зона", "закрыт", "открыт"],
+  synonyms: ["маска в чеке", "продукт"],
+  aisles: ["№", "отдел", "что внутри"],
+  rules: ["строка чека", "продукт"],
+  sync: ["что", "метка", "когда"],
+  people: ["имя", "роль"],
+};
+
+function sectionBody(state) {
+  const cfg = gh.config();
+
+  if (section === "connect") {
+    return html`<div class="setpane">
+      <p class="prose">Приложение хранит склад, список и справочники в твоём приватном репозитории. Ключ живёт только в этом браузере и никуда больше не уходит. Создаёшь и вставляешь его ты сам.</p>
+      ${raw(connectForm(cfg, { compact: true }))}
+      ${raw(checkResult ? `<p class="prose ${checkResult.ok ? "" : "prose--alarm"}">${esc(checkResult.text)}</p>` : "")}
+      <details class="note">
+        <summary>Где взять ключ</summary>
+        <p class="prose">GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens. Доступ дай только репозиторию с данными, права Contents: Read and write.</p>
+      </details>
+    </div>`;
+  }
+
+  if (section === "danger") {
+    return html`<div class="setpane">
+      <p class="prose">Сброс стирает всё, что накопилось в этом браузере. Если репозиторий подключён, данные вернутся при следующей синхронизации; если нет, исчезнут насовсем.</p>
+      <div class="rowbtns">
+        <button class="btn btn--ghost" type="button" data-act="loadDemo">Загрузить демо-данные</button>
+        <button class="btn btn--ghost btn--danger" type="button" data-act="wipe">Стереть всё</button>
+      </div>
+    </div>`;
+  }
+
+  const list = rows(state);
+  const head = HEADS[section] ?? [];
+
+  if (!list.length) {
+    const empty = {
+      sync: "Очередь пуста: всё, что менялось, уже уехало.",
+      people: "Список видишь только ты.",
+      rules: "Правил ещё нет. Они появляются сами: каждый раз, когда подтверждаешь спорную строку чека, приложение запоминает соответствие.",
+      shelf: "Справочник сроков пуст. Подтяни его из волта кнопкой «Обновить справочники».",
+      synonyms: "Словарь масок пуст. Подтяни его из волта.",
+      aisles: "Порядок отделов не задан. Подтяни его из волта.",
+    }[section];
+
+    return html`<div class="setpane"><p class="prose">${empty}</p>
+      ${raw(section === "people" ? `<form class="addbar" data-act-submit="addPerson"><input class="field" name="name" placeholder="Имя" aria-label="Имя человека" autocomplete="off" required><button class="btn btn--ghost btn--sm" type="submit">Добавить</button></form>` : "")}
+    </div>`;
+  }
+
+  const cols = `grid-template-columns:${head.map((_, i) => (i === 0 ? "1.4fr" : "1fr")).join(" ")}`;
+
+  return html`<div class="table" role="table">
+    <div class="trow trow--head" role="row" style="${cols}">
+      ${raw(head.map((h) => `<span role="columnheader">${esc(h)}</span>`).join(""))}
+    </div>
+    ${raw(list.map((row, i) => `<div class="trow" role="row" style="${cols}" data-act="pick" data-index="${i}" data-focused="${i === cursor ? 1 : 0}">
+      ${row.cells.map((c, j) => `<span class="${j === 0 ? "tname" : "tdim"}">${row.html?.[j] ? c : esc(c)}</span>`).join("")}
+    </div>`).join(""))}
+    ${raw(section === "people" ? `<form class="addbar" data-act-submit="addPerson"><input class="field" name="name" placeholder="Имя" aria-label="Имя человека" autocomplete="off" required><button class="btn btn--ghost btn--sm" type="submit">Добавить</button></form>` : "")}
+  </div>`;
+}
+
+/** The rail leads with the state of the connection, because that is what everything else depends on. */
+function railAnswer(state) {
+  const connected = gh.isConfigured();
+
+  if (!connected) {
+    return { value: "Не подключено", note: "Пока ключа нет, всё живёт только в этом браузере и не переживёт его очистки." };
+  }
+  if (state.demo) {
+    return { value: "Демо", note: "Синхронизация заблокирована, пока загружены выдуманные данные." };
+  }
+  if (state.queue.length) {
+    return { value: String(state.queue.length), unit: M.plural(state.queue.length, "правка", "правки", "правок"), note: "ждут отправки, уедут сами при первой возможности" };
+  }
+  return {
+    value: "Всё уехало",
+    note: state.syncedAt ? `Последний обмен ${new Date(state.syncedAt).toLocaleString("ru")}` : "Обмена ещё не было",
+  };
+}
+
+function railContext(state) {
+  const list = rows(state);
+  const row = list[cursor];
+
+  if (row && section === "shelf") {
+    const affected = state.stock.filter((i) => !i.deleted && !i.empty && i.product.toLowerCase().includes(row.detail.product));
+    return html`<div class="insp-block">
+      <h2 class="insp-name">${row.detail.product}</h2>
+      <p class="prose">Закрытым живёт ${row.detail.closed} ${M.plural(row.detail.closed, "день", "дня", "дней")}${row.detail.opened ? `, вскрытым — ${row.detail.opened}` : ""}. Зона по умолчанию: ${row.detail.zone}.</p>
+    </div>
+    <div class="insp-block">
+      <div class="label">Что сейчас под этой строкой</div>
+      ${raw(affected.length
+        ? affected.map((i) => `<div class="insp-row"><span>${esc(i.product)}</span><span class="tdim num">${esc(M.expiryLabel(i))}</span></div>`).join("")
+        : `<p class="prose prose--muted">Ни одной позиции на складе под это правило сейчас не подпадает.</p>`)}
+    </div>`;
+  }
+
+  if (row && section === "synonyms") {
+    return html`<div class="insp-block">
+      <h2 class="insp-name">${row.detail.product}</h2>
+      <p class="prose">Любая строка чека, содержащая <code class="mono">${row.detail.mask}</code>, распознаётся как этот продукт. Порядок важен: более длинная маска должна стоять выше короткой, иначе «СЫР» съест «СЫРОК».</p>
+    </div>`;
+  }
+
+  if (row && section === "rules") {
+    return html`<div class="insp-block">
+      <h2 class="insp-name">${row.detail.product}</h2>
+      <p class="prose">Выучено из чека: <code class="mono">${row.detail.raw}</code>. Такие правила появляются, когда подтверждаешь спорную строку, и с каждым чеком приложение спрашивает всё реже.</p>
+    </div>
+    <div class="insp-foot">
+      <button class="btn btn--ghost" type="button" data-act="forgetRule" data-raw="${row.detail.raw}">Забыть правило</button>
+    </div>`;
+  }
+
+  if (row && section === "people") {
+    return html`<div class="insp-block">
+      <h2 class="insp-name">${row.detail.name}</h2>
+      <p class="prose">${row.detail.self ? "Это ты." : "Видит тот же список. Отметки сливаются по каждой позиции отдельно, так что двое в магазине не затирают друг друга."}</p>
+    </div>
+    ${raw(row.detail.self ? "" : `<div class="insp-foot"><button class="btn btn--ghost" type="button" data-act="removePerson" data-id="${esc(row.detail.id)}">Убрать</button></div>`)}`;
+  }
+
+  if (row && section === "aisles") {
+    return html`<div class="insp-block">
+      <h2 class="insp-name">${row.detail.name}</h2>
+      <p class="prose">Отдел ${row.detail.order} в порядке обхода. Список группируется по этой таблице, чтобы зал проходился один раз.</p>
+    </div>`;
+  }
+
+  /* Nothing picked — the section's own summary. */
+  const summaries = {
+    connect: html`<div class="insp-block">
+      <div class="label">Что сейчас известно</div>
+      ${raw(gh.isConfigured()
+        ? `<div class="insp-row"><span>Репозиторий</span><span class="tdim">${esc(gh.config().repo)}</span></div>
+           <div class="insp-row"><span>Ветка</span><span class="tdim">${esc(gh.config().branch ?? "main")}</span></div>
+           <div class="insp-row"><span>Ключ</span><span class="tdim">хранится в этом браузере</span></div>`
+        : `<p class="prose prose--muted">Ключа нет. Данные лежат только здесь и пропадут вместе с данными сайта.</p>`)}
+    </div>`,
+    sync: html`<div class="insp-block">
+      <div class="label">Что уезжает</div>
+      <p class="prose">Склад, список, чеки, меню, трекинг, магазины, выученные правила и история покупок. Каждая коллекция сливается по позициям, а не файлом целиком, поэтому двое могут править одновременно.</p>
+    </div>
+    <div class="insp-foot">
+      <button class="btn" type="button" data-act="syncNow" ${raw(gh.isConfigured() ? "" : "disabled")}>Синхронизировать</button>
+      <button class="btn btn--ghost" type="button" data-act="pullRefs" ${raw(gh.isConfigured() ? "" : "disabled")}>Обновить справочники из волта</button>
+    </div>`,
+    shelf: html`<div class="insp-block">
+      <div class="label">Откуда это</div>
+      <p class="prose">Таблица из <code class="mono">Справочники/Сроки.md</code> в волте. Правь её в Obsidian, приложение подтянет. Ответ «ещё есть» на ревизии тоже растягивает срок, если продукт стабильно живёт дольше.</p>
+    </div>`,
+    synonyms: html`<div class="insp-block">
+      <div class="label">Откуда это</div>
+      <p class="prose">Таблица из <code class="mono">Справочники/Синонимы.md</code>. Первое совпадение выигрывает, поэтому частные маски стоят выше общих.</p>
+    </div>`,
+    aisles: html`<div class="insp-block">
+      <div class="label">Откуда это</div>
+      <p class="prose">Таблица из <code class="mono">Справочники/Отделы.md</code>. Порядок строк повторяет порядок, в котором ты идёшь по залу.</p>
+    </div>`,
+    rules: html`<div class="insp-block">
+      <div class="label">Как это копится</div>
+      <p class="prose">Каждое подтверждение спорной строки чека становится правилом. Чем их больше, тем меньше вопросов при следующем чеке.</p>
+    </div>`,
+    people: html`<div class="insp-block">
+      <div class="label">Как добавить</div>
+      <p class="prose">Сделай человека коллаборатором приватного репозитория на GitHub, дальше он открывает то же приложение и вводит свой ключ.</p>
+    </div>`,
+    danger: html`<div class="insp-block">
+      <div class="label">Что именно сотрётся</div>
+      <p class="prose">Склад, список, чеки, история и очередь — всё, что лежит в этом браузере. Справочники и рецепты живут в волте и вернутся при следующем обновлении.</p>
+    </div>`,
+  };
+
+  return summaries[section] ?? "";
+}
+
+function desk(state) {
+  const answer = railAnswer(state);
+
+  const rail = SECTIONS.map((s) => {
+    const n = countOf(s.key, state);
+    return html`<button class="setnav-item${s.apart ? " setnav-item--apart" : ""}" type="button"
+        data-act="section" data-section="${s.key}" aria-pressed="${section === s.key}">
+      <span>${s.name}</span>
+      ${raw(n != null ? `<span class="setnav-count num">${n}</span>` : "")}
+    </button>`;
+  }).join("");
+
+  const current = SECTIONS.find((s) => s.key === section);
+
+  return html`<main class="screen">
+    <header class="head head--dark">
+      <div class="head-row">
+        <div>
+          <h1>Настройки</h1>
+          <span class="head-sub">${current?.name ?? ""}</span>
+        </div>
+      </div>
+    </header>
+
+    ${raw(state.demo ? `<div class="notice notice--alarm">Загружены демо-данные, синхронизация заблокирована. <button class="linkbtn" type="button" data-act="startClean">Очистить и начать с нуля</button></div>` : "")}
+
+    <div class="split">
+      <nav class="setnav" aria-label="Разделы настроек">${raw(rail)}</nav>
+      <div class="setbody">${raw(sectionBody(state))}</div>
+      <aside class="inspector" aria-label="Подробности">
+        <div class="answer">
+          <p class="answer-value">${answer.value}${raw(answer.unit ? `<span class="answer-unit">${esc(answer.unit)}</span>` : "")}</p>
+          <p class="answer-note">${answer.note}</p>
+        </div>
+        ${raw(railContext(state))}
+      </aside>
+    </div>
+  </main>`;
+}
+
+/* ---------- screen ---------- */
 
 export default {
   title: () => "Настройки",
 
   render(state) {
-    const cfg = gh.config();
-    const connected = gh.isConfigured();
-    const others = state.people.filter((p) => !p.self);
+    return wide.matches ? desk(state) : phone(state);
+  },
 
-    return html`<main class="screen">
-      <header class="head"><h1>Настройки</h1></header>
+  leave() {
+    cursor = -1;
+    checkResult = null;
+  },
 
-      <div class="body">
-        <section class="pane">
-          <div class="label">Репозиторий данных</div>
-          <p class="prose">Приложение хранит склад, список и справочники в твоём приватном репозитории на GitHub. Ключ доступа живёт только в этом браузере и никуда больше не уходит.</p>
+  keys(e, state) {
+    if (!wide.matches) return;
+    const list = rows(state);
+    if (!list.length) return;
 
-          <form class="stack" data-act-submit="connect">
-            <label class="fieldset">
-              <span class="fieldset-label">Репозиторий</span>
-              <input class="field" name="repo" value="${cfg.repo ?? ""}" placeholder="логин/kitchen-data" autocomplete="off" spellcheck="false" required>
-            </label>
-            <label class="fieldset">
-              <span class="fieldset-label">Ключ доступа</span>
-              <input class="field" name="token" type="password" value="${cfg.token ? "••••••••••••" : ""}" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
-            </label>
-            <label class="fieldset">
-              <span class="fieldset-label">Ветка</span>
-              <input class="field" name="branch" value="${cfg.branch ?? "main"}" autocomplete="off" spellcheck="false">
-            </label>
-            <button class="btn btn--grow" type="submit" ${raw(checking ? "disabled" : "")}>${checking ? "Проверяю…" : connected ? "Проверить снова" : "Подключить"}</button>
-          </form>
-
-          ${raw(checkResult ? `<p class="prose ${checkResult.ok ? "" : "prose--alarm"}">${esc(checkResult.text)}</p>` : "")}
-
-          <details class="note">
-            <summary>Как сделать ключ</summary>
-            <p class="prose">На GitHub: Settings → Developer settings → Personal access tokens → Fine-grained tokens. Доступ дать только репозиторию с данными, права — Contents: Read and write. Ключ создаёшь и вставляешь ты сам; я его не вижу и не запрашиваю.</p>
-          </details>
-        </section>
-
-        ${raw(state.demo ? `<section class="pane pane--alarm">
-          <div class="label">Сейчас загружены демо-данные</div>
-          <p class="prose prose--alarm">Восемь позиций склада, шесть строк списка и три выдуманных чека — они нужны, чтобы приложение было на что посмотреть до первой закупки. Синхронизация с ними заблокирована: иначе выдуманный склад уедет в репозиторий и смешается с настоящим.</p>
-          <p class="prose">Справочники и рецепты из волта это не затрагивает — их можно тянуть прямо сейчас.</p>
-          <button class="btn btn--grow" type="button" data-act="startClean">Очистить и начать с нуля</button>
-        </section>` : "")}
-
-        <section class="pane">
-          <div class="head-row">
-            <div class="label">Синхронизация</div>
-            <span class="head-sub num">${state.queue.length ? `${state.queue.length} правок в очереди` : "очередь пуста"}</span>
-          </div>
-          <p class="prose">${state.syncedAt ? `Последний обмен: ${new Date(state.syncedAt).toLocaleString("ru")}.` : "Обмена ещё не было."} Правки копятся офлайн и уходят при первой возможности; конфликты сливаются по каждой позиции отдельно.</p>
-          <div class="rowbtns">
-            <button class="btn btn--grow" type="button" data-act="syncNow" ${raw(connected ? "" : "disabled")}>Синхронизировать</button>
-            <button class="btn btn--ghost" type="button" data-act="pullRefs" ${raw(connected ? "" : "disabled")}>Обновить справочники</button>
-          </div>
-        </section>
-
-        <section class="pane">
-          <div class="label">Кто ещё видит список</div>
-          <p class="prose">Второй человек добавляется коллаборатором того же приватного репозитория. Он ставит приложение по той же ссылке, вводит свой ключ — и отметки в магазине сливаются у обоих.</p>
-
-          ${raw(others.length
-            ? others.map((p) => `<div class="ing" data-have="1">
-                <span class="ing-name">${esc(p.name)}</span>
-                <button class="chip" type="button" data-act="removePerson" data-id="${esc(p.id)}">убрать</button>
-              </div>`).join("")
-            : `<p class="prose prose--muted">Пока список видишь только ты.</p>`)}
-
-          <form class="addbar" data-act-submit="addPerson">
-            <input class="field" name="name" placeholder="Имя" aria-label="Имя человека" autocomplete="off" required>
-            <button class="icon-btn" type="submit" aria-label="Добавить человека">${raw(icon("i-plus", { size: 22, stroke: "#1c3327" }))}</button>
-          </form>
-        </section>
-
-        <section class="pane">
-          <div class="label">Справочники</div>
-          <p class="prose">Сроки годности, синонимы касс и порядок отделов — markdown-таблицы в волте. Правь их в Obsidian, приложение подтянет.</p>
-          <div class="figures figures--tight">
-            <div class="figure"><span class="figure-n num">${state.shelf.length}</span><span class="figure-t">строк в сроках</span></div>
-            <div class="figure"><span class="figure-n num">${state.synonyms.length}</span><span class="figure-t">масок синонимов</span></div>
-            <div class="figure"><span class="figure-n num">${Object.keys(state.rules).length}</span><span class="figure-t">правил выучено из чеков</span></div>
-          </div>
-        </section>
-
-        <section class="pane pane--alarm">
-          <div class="label">Опасная зона</div>
-          <p class="prose prose--alarm">Сброс стирает всё, что накопилось в этом браузере. Если репозиторий подключён, данные вернутся при следующей синхронизации; если нет — исчезнут насовсем.</p>
-          <div class="rowbtns">
-            <button class="btn btn--ghost" type="button" data-act="loadDemo">Загрузить демо-данные</button>
-            <button class="btn btn--ghost btn--danger" type="button" data-act="wipe">Стереть всё</button>
-          </div>
-        </section>
-      </div>
-    </main>`;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      cursor = Math.max(0, Math.min(list.length - 1, cursor + (e.key === "ArrowDown" ? 1 : -1)));
+      touch();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cursor = -1;
+      touch();
+    }
   },
 
   actions: {
+    section(el) {
+      section = el.dataset.section;
+      cursor = -1;
+      touch();
+    },
+
+    pick(el) {
+      cursor = Number(el.dataset.index);
+      touch();
+    },
+
+    forgetRule(el) {
+      commit("rules.forget", (s) => {
+        delete s.rules[el.dataset.raw];
+        return null;
+      }, { sync: false });
+      cursor = -1;
+      toast("Правило забыто, в следующий раз спрошу снова");
+    },
+
     async connect(form) {
       const data = new FormData(form);
       const repo = String(data.get("repo") ?? "").trim();
@@ -179,12 +524,13 @@ export default {
       if (!name) return;
 
       commit("people.add", (s) => {
-        const person = { id: uid("p"), name, self: false, at: Date.now() };
-        s.people.push(person);
+        s.people.push({ id: uid("p"), name, self: false, at: Date.now() });
         return null;
       }, { sync: false });
 
-      form.reset();
+      const live = document.querySelector('[data-act-submit="addPerson"]');
+      live?.reset();
+      live?.querySelector('[name="name"]')?.focus();
       toast(`${name} теперь видит список`);
     },
 
@@ -193,6 +539,7 @@ export default {
         s.people = s.people.filter((p) => p.id !== el.dataset.id);
         return null;
       }, { sync: false });
+      cursor = -1;
     },
 
     loadDemo() {
@@ -207,6 +554,7 @@ export default {
       replace(
         {
           ...structuredClone(EMPTY_STATE),
+          demo: false,
           recipes: s.recipes,
           shelf: s.shelf,
           synonyms: s.synonyms,
@@ -224,7 +572,7 @@ export default {
     wipe() {
       if (!confirm("Стереть весь локальный склад, список и историю?")) return;
       resetStore();
-      replace(structuredClone(EMPTY_STATE), "wipe");
+      replace({ ...structuredClone(EMPTY_STATE), demo: false }, "wipe");
       toast("Стёрто");
     },
   },

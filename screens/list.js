@@ -117,7 +117,11 @@ function phone(state) {
     <header class="head">
       <div class="head-row">
         <h1>Магазин</h1>
+        <span class="toolbar-gap"></span>
         <span class="head-sub num">${done.length} / ${entries.length}</span>
+        <button class="icon-btn icon-btn--sm" type="button" data-act="share" aria-label="Поделиться списком">
+          ${raw(icon("i-share", { size: 18, stroke: "#1c3327" }))}
+        </button>
       </div>
       <div class="bar"><i style="transform:scaleX(${share})"></i></div>
     </header>
@@ -134,9 +138,7 @@ function phone(state) {
 
     <div class="foot">
       <a class="btn btn--grow" href="#scan">Сканировать чек</a>
-      <button class="btn btn--ghost" type="button" data-act="share" aria-label="Поделиться списком">
-        ${raw(icon("i-share", { size: 20, stroke: "#1c3327" }))}
-      </button>
+      ${raw(done.length ? `<button class="btn btn--ghost" type="button" data-act="clearDone">Убрать взятое · ${done.length}</button>` : "")}
     </div>
   </main>`;
 }
@@ -476,9 +478,11 @@ export default {
       const done = state.list.filter((e) => e.done && !e.deleted);
       if (!done.length) return toast("Взятого пока нет");
 
+      const ids = done.map((e) => e.id);
+
       commit("list.clearDone", (s) => {
         for (const entry of s.list) {
-          if (entry.done && !entry.deleted) {
+          if (ids.includes(entry.id)) {
             entry.deleted = true;
             entry.at = Date.now();
           }
@@ -486,7 +490,19 @@ export default {
         return { kind: "list", bulk: true };
       });
 
-      toast(`Убрано ${done.length}`);
+      toast(`Убрано ${done.length}`, "calm", {
+        undo() {
+          commit("list.clearDone.undo", (s) => {
+            for (const entry of s.list) {
+              if (ids.includes(entry.id)) {
+                entry.deleted = false;
+                entry.at = Date.now();
+              }
+            }
+            return { kind: "list", bulk: true };
+          });
+        },
+      });
     },
   },
 };

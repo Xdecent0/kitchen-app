@@ -304,6 +304,17 @@ test("трекинг считает долю еды дома и траты вн�
   assert.ok(Math.abs(s.homeShare - 2 / 3) < 0.001);
 });
 
+/* -------------------------------------------------------- demo protection */
+
+test("демо-данные опознаются даже без флага", async () => {
+  // States saved before the flag existed must still be recognised, or the
+  // guard fails exactly for the person who set the app up early.
+  const { looksLikeDemo } = await import("../lib/store.js");
+  assert.ok(looksLikeDemo({ stock: [{ id: "s1" }, { id: "s2" }], receipts: [{ id: "rc_1" }] }));
+  assert.ok(!looksLikeDemo({ stock: [{ id: "s_a1b2" }], receipts: [{ id: "rc_x9" }] }));
+  assert.ok(!looksLikeDemo({ stock: [], receipts: [] }));
+});
+
 test("неделя начинается с понедельника", () => {
   const start = weekStart(Date.UTC(2026, 7, 15)); // суббота
   assert.equal(new Date(start).getUTCDay(), 1);

@@ -417,6 +417,23 @@ test("опоры считают и записанное руками, и пер�
   assert.ok(month.some((s) => s.product === "Плов"), "период управляет выборкой");
 });
 
+test("место, где ты ел, не предлагается держать дома", () => {
+  // "Чем питаешься чаще всего" counts anything logged, which is right for the
+  // question; "держать всегда" is a different question, and «Столовая на
+  // работе» is not a product you can keep in a fridge.
+  const meals = [
+    { date: day(1), title: "Сырники", source: "дома", products: ["Творог", "Яйца"] },
+    { date: day(2), title: "Столовая на работе", source: "заведение", cost: 480 },
+    { date: day(3), title: "Пицца", source: "доставка", cost: 890 },
+  ];
+
+  const all = staples(meals, { days: 7, now: T0, limit: 10 });
+  const keepable = all.filter((s) => s.kind === "product" && s.home);
+
+  assert.deepEqual(keepable.map((s) => s.product).sort(), ["Творог", "Яйца"]);
+  assert.ok(all.some((s) => s.product === "Пицца"), "но в «чем питаешься» она остаётся");
+});
+
 test("неделя начинается с понедельника", () => {
   const start = weekStart(Date.UTC(2026, 7, 15)); // суббота
   assert.equal(new Date(start).getUTCDay(), 1);

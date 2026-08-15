@@ -1926,6 +1926,233 @@ kbd {
   }
 }
 
+/* ---------- desktop recipes: reel, reading, basket ---------- */
+
+.reel {
+  width: 360px;
+  flex: none;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.reel-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px var(--pad);
+  border-bottom: 1px solid var(--line-soft);
+  min-height: 52px;
+}
+
+.reel-row[data-focused="1"] {
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--ink);
+}
+
+.reel-row[data-burning="1"] {
+  background: var(--alarm-bg);
+}
+
+.reel-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.reel-name {
+  font-size: var(--t-item);
+  font-weight: 500;
+}
+
+/* The full list of what is missing, not the first two — that is the fact the
+   card is opened for, and truncating it forces opening every dish in turn. */
+.reel-gap {
+  font-size: var(--t-meta);
+  color: var(--alarm-ink);
+}
+
+.reel-ok {
+  font-size: var(--t-meta);
+  color: var(--ink-5);
+}
+
+.reel-min {
+  font-size: var(--t-meta);
+  color: var(--ink-4);
+  flex: none;
+}
+
+.reading {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+}
+
+.reading-top {
+  padding: 16px var(--pad) 12px;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reading-name {
+  margin: 0;
+  font-size: var(--t-title);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.reading-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Ingredients stay put while the steps scroll: at the stove you need both. */
+.reading-ings {
+  width: 244px;
+  flex: none;
+  padding: 14px var(--pad);
+  border-right: 1px solid var(--line-soft);
+  overflow-y: auto;
+}
+
+.reading-steps {
+  flex: 1;
+  min-width: 0;
+  padding: 14px var(--pad);
+  overflow-y: auto;
+}
+
+.reading-steps .steps-list {
+  max-width: 58ch;
+}
+
+.reading-foot {
+  padding: 12px var(--pad);
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 8px;
+}
+
+.reading-foot .btn {
+  min-height: 46px;
+  padding: 12px 18px;
+  font-size: var(--t-body);
+}
+
+/* ---------- desktop week canvas ---------- */
+
+/* Days run down and meals across, which is the transpose of the phone grid.
+   Seven rows of three wide cells fit without scrolling; seven columns of three
+   do not, and a week you have to scroll is not a week you can plan. */
+.weekcanvas {
+  padding: 12px var(--pad) 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 880px;
+}
+
+.wrow {
+  display: grid;
+  grid-template-columns: 92px repeat(3, 1fr);
+  gap: 6px;
+  align-items: stretch;
+}
+
+.wrow--head {
+  align-items: end;
+  padding-bottom: 2px;
+}
+
+.wslot-head {
+  font-size: var(--t-meta);
+  color: var(--ink-4);
+  padding-left: 2px;
+}
+
+.wrow[data-today="1"] .wday {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.wrow[data-weekend="1"] {
+  margin-top: 6px;
+}
+
+.wday {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  font-size: var(--t-meta);
+  color: var(--ink-4);
+}
+
+.wday b {
+  font-size: var(--t-body);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.wcell {
+  min-height: 74px;
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
+}
+
+.wcell--empty {
+  background: none;
+  border: 1px dashed rgba(28, 51, 39, 0.22);
+  align-items: center;
+}
+
+.wcell[data-active="1"] {
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.wcell-name {
+  font-size: var(--t-body);
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.wcell-meta {
+  font-size: 12px;
+  color: var(--ink-4);
+}
+
+.wcell-meta--gap {
+  color: var(--alarm-ink);
+}
+
+.wcell-cost {
+  font-size: 12px;
+  color: var(--ink-5);
+}
+
+.pickerlist {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--line-soft);
+}
+
 /* ---------- desktop settings: sections, content, provenance ---------- */
 
 .setnav {

@@ -2938,16 +2938,34 @@ kbd {
     display: flex;
     order: 2;
     flex-direction: column;
+    /* The phone centres this strip on one line; stacked in the sidebar it has
+       to line up with the menu above it instead. */
+    align-items: stretch;
     gap: 4px;
     margin-top: auto;
-    padding-top: 12px;
+    /* No side padding of its own: the sidebar already sets the gutter, and
+       adding a second one put the cog a dozen pixels right of the icon column. */
+    padding: 12px 0 0;
     border-bottom: 0;
     border-top: 1px solid rgba(244, 241, 230, 0.12);
   }
 
+  /* On a phone the strip is one line and the cog is an icon beside it. In the
+     sidebar it is a row of the same menu, so it gets its label back — a lone
+     unlabelled glyph under the status line reads as something broken. */
+  .app:not([data-nav="mini"]) .tabs-foot .tab {
+    width: auto;
+    justify-content: flex-start;
+    padding: 9px 10px;
+  }
+
+  .app:not([data-nav="mini"]) .tabs-foot .tab-label {
+    display: block;
+  }
+
   .tabs-foot .sync {
     color: var(--on-dark-3);
-    padding: 0 8px;
+    padding: 0 10px;
   }
 
   .tabs-foot .sync[data-tone="busy"] {

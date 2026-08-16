@@ -2944,8 +2944,11 @@ kbd {
     gap: 4px;
     margin-top: auto;
     /* No side padding of its own: the sidebar already sets the gutter, and
-       adding a second one put the cog a dozen pixels right of the icon column. */
+       adding a second one put the cog a dozen pixels right of the icon column.
+       The phone strip paints itself on the light surface; inside the dark
+       sidebar that same fill became a pale slab with unreadable text on it. */
     padding: 12px 0 0;
+    background: transparent;
     border-bottom: 0;
     border-top: 1px solid rgba(244, 241, 230, 0.12);
   }

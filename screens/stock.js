@@ -6,9 +6,18 @@ import { html, raw, icon, esc, cap, fmtMoney, fmtDate, toast, wide } from "../li
 import { touch, commit, uid } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import { rank, lineMatchesProduct } from "../lib/recipes.js";
+import { toStockItem } from "../lib/receipt.js";
 import * as T from "../lib/trip.js";
 
 export const ZONES = ["холодильник", "морозилка", "полка", "овощи"];
+
+/** The zone in the accusative, because «в морозилка» is not a sentence. */
+const ZONE_INTO = {
+  холодильник: "в холодильник",
+  морозилка: "в морозилку",
+  полка: "на полку",
+  овощи: "в овощи",
+};
 
 export const ZONE_ICON = {
   холодильник: "i-carton",
@@ -64,6 +73,24 @@ export function stockRow(itemEntry, now = M.today()) {
   </a>`;
 }
 
+/**
+ * Typing a product in by hand.
+ *
+ * One field, because everything else is already known: the reference table says
+ * where the thing lives and how long it keeps, and the zone filter — if one is
+ * on — says which shelf the person is standing at right now.
+ */
+function addbar(flat = false, slim = false) {
+  const where = zoneFilter ? ZONE_INTO[zoneFilter] : "на склад";
+
+  return html`<form class="addbar${flat ? " addbar--flat" : ""}${slim ? " addbar--slim" : ""}" data-act-submit="add">
+    <input class="field" name="product" placeholder="Добавить ${where}" aria-label="Добавить продукт ${where}" autocomplete="off" required>
+    <button class="icon-btn${slim ? " icon-btn--sm" : ""}" type="submit" aria-label="Добавить продукт ${where}">
+      ${raw(icon("i-plus", { size: slim ? 18 : 22, stroke: "#1c3327" }))}
+    </button>
+  </form>`;
+}
+
 function emptyScreen(state) {
   // Both links into the audit used to sit behind this screen, so an empty shelf
   // meant no way in at all — even when the purchase rhythm had a week of
@@ -75,8 +102,9 @@ function emptyScreen(state) {
     <div class="body">
       <div class="empty">
         <h2>О запасах ничего не знаю</h2>
-        <p>Склад заполняется сам из чеков: отсканируй QR в подвале чека, и позиции со сроками появятся здесь.</p>
-        <a class="btn" href="#scan">Сканировать чек</a>
+        <p>Дальше склад будет заполняться сам из чеков: отсканируй QR в подвале чека, и позиции со сроками появятся здесь. Но первый раз — то, что уже стоит в холодильнике и на полке, — придётся набрать руками.</p>
+        ${raw(addbar(true))}
+        <a class="btn btn--ghost" href="#scan">Сканировать чек</a>
         ${raw(pending
           ? `<p class="prose prose--muted">А ещё по ритму покупок накопилось ${pending} ${M.plural(pending, "вопрос", "вопроса", "вопросов")} — ревизия ответит на них за двадцать секунд.</p>
              <a class="btn btn--ghost" href="#audit">Пройти ревизию</a>`
@@ -143,6 +171,10 @@ function phone(state) {
       <div class="zones">${raw(zoneCards)}</div>
       <div class="aisle">${heading}</div>
       ${raw(rows)}
+      <!-- Under the shelf, not above it: on a phone the job is looking at what
+           is there, and a field for typing things in would push the first rows
+           off a 375px screen for the sake of the rarer task. -->
+      ${raw(addbar())}
     </div>
 
     <div class="foot">
@@ -214,8 +246,9 @@ function desk(state) {
     </header>
 
     <div class="toolbar">
-      ${raw(filterChips())}
+      ${raw(addbar(true, true))}
       <span class="toolbar-sep" aria-hidden="true"></span>
+      ${raw(filterChips())}
       <div class="chips">${raw(zoneChips)}</div>
       <span class="toolbar-gap"></span>
       ${raw(marked.length
@@ -336,6 +369,41 @@ export default {
   },
 
   actions: {
+    add(form, state) {
+      const product = String(new FormData(form).get("product") ?? "").trim();
+      if (!product) return;
+
+      const twice = alive(state).some((i) => i.product.toLowerCase() === product.toLowerCase());
+      let added = null;
+
+      commit("stock.add", (s) => {
+        // The receipt path already knows how to turn a name into a shelf entry —
+        // zone and shelf life out of the reference table, bought today. Adding by
+        // hand is the same product arriving by a different door, not a second
+        // kind of stock item.
+        added = toStockItem({ product, zone: zoneFilter ?? undefined }, {
+          shelf: s.shelf,
+          boughtAt: M.today(),
+          id: uid("s"),
+        });
+        s.stock.push(added);
+        return { kind: "stock", id: added.id };
+      });
+
+      const life = added?.shelfDays
+        ? `${added.shelfDays} ${M.plural(added.shelfDays, "день", "дня", "дней")}`
+        : "срок неизвестен";
+      toast(twice
+        ? `«${product}» уже был на складе — теперь две записи`
+        : `${product} · ${added?.zone} · ${life}`);
+
+      // commit() re-renders, so this form node is detached: re-query the live one
+      // or every addition after the first loses the caret.
+      const live = document.querySelector('[data-act-submit="add"]');
+      live?.reset();
+      live?.querySelector('[name="product"]')?.focus();
+    },
+
     filter(el) {
       filter = el.dataset.filter;
       cursor = 0;

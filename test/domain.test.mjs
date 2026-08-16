@@ -17,6 +17,7 @@ import { encode, versionFor } from "../lib/qr.js";
 import * as M_MONEY from "../lib/money.js";
 import * as log from "../lib/log.js";
 import { parseTable, parseShelf, parseSynonyms, parseRecipe } from "../lib/vault.js";
+import { toStockItem } from "../lib/receipt.js";
 import { priceHistory, bestStore, trackingSummary, weekStart, staples } from "../lib/planning.js";
 import { SEED_SHELF, SEED_SYNONYMS, SEED_JUNK, SEED_AISLES } from "../lib/store.js";
 
@@ -903,4 +904,21 @@ test("строка рядом собирается в заданном поря�
 test("гривна сама себя не пересчитывает", () => {
   assert.equal(M_MONEY.convert(100, "UAH", { rates: RATES }).value, 100);
   assert.equal(M_MONEY.alongside(100, { rates: RATES, show: ["UAH"] }), null);
+});
+
+test("набранный руками продукт получает зону и срок из справочника", () => {
+  const known = toStockItem({ product: "творог" }, { shelf: SEED_SHELF, boughtAt: Date.UTC(2026, 7, 16), id: "s1" });
+  assert.equal(known.zone, "холодильник");
+  assert.equal(known.shelfDays, 5);
+  assert.equal(known.level, "много");
+
+  // Незнакомого продукта в справочнике нет — и выдумывать ему срок нельзя:
+  // полка со сроком «неизвестно» честнее, чем красивое число из ниоткуда.
+  const stranger = toStockItem({ product: "тортилья" }, { shelf: SEED_SHELF, boughtAt: Date.UTC(2026, 7, 16), id: "s2" });
+  assert.equal(stranger.zone, "полка");
+  assert.equal(stranger.shelfDays, null);
+
+  // Зона, названная человеком (фильтр склада), перебивает справочник.
+  const chosen = toStockItem({ product: "тортилья", zone: "морозилка" }, { shelf: SEED_SHELF, boughtAt: Date.UTC(2026, 7, 16), id: "s3" });
+  assert.equal(chosen.zone, "морозилка");
 });

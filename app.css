@@ -2806,6 +2806,19 @@ kbd {
   font-size: var(--t-body);
 }
 
+/* One field, not two, so it does not need the list's width — and the stock
+   toolbar has filters, zones and a hint to seat beside it on one row. */
+.addbar--slim {
+  width: 240px;
+}
+
+/* The empty shelf borrows the flat bar but not its desktop width — the same
+   screen has to fit inside a 375px phone. */
+.empty .addbar--flat {
+  width: 100%;
+  margin-top: 6px;
+}
+
 /* ---------- desktop ---------- */
 
 @media (min-width: 900px) {

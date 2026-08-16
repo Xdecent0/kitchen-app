@@ -9,7 +9,8 @@ import * as gh from "../lib/github.js";
 import { mark } from "../lib/sync.js";
 
 let stage = "camera";
-let stopCamera = null;
+/** The live MediaStream. Outlives the <video> elements the router keeps replacing. */
+let camStream = null;
 let job = null;
 let parsed = null;
 let queue = [];
@@ -194,22 +195,30 @@ export default {
   },
 
   async mount(root) {
-    if (stage !== "camera" || stopCamera) return;
+    if (stage !== "camera") return;
 
     const video = root.querySelector("[data-video]");
     const errorEl = root.querySelector("[data-cam-error]");
     if (!video) return;
 
-    try {
-      stopCamera = await R.openCamera(video);
-    } catch (err) {
-      errorEl.hidden = false;
-      errorEl.textContent = `Камера недоступна: ${err.message}. Можно загрузить фото чека файлом в настройках.`;
-      return;
+    if (!camStream) {
+      try {
+        camStream = await R.openCamera();
+      } catch (err) {
+        errorEl.hidden = false;
+        errorEl.textContent = `Камера недоступна: ${err.message}. Можно загрузить фото чека файлом.`;
+        return;
+      }
     }
+
+    // The element is new on every render; the stream is not.
+    await R.attach(video, camStream);
 
     if (!R.qrSupported()) return;
 
+    // The watcher polls a specific element, so it has to follow the live one —
+    // left pointing at the detached copy it would silently never see a code.
+    abort?.abort();
     abort = new AbortController();
     R.scanQr(video, { signal: abort.signal })
       .then((url) => startJob("receipt-qr", () => R.submitQr(url), "QR прочитан"))
@@ -219,8 +228,8 @@ export default {
   leave() {
     abort?.abort();
     abort = null;
-    stopCamera?.();
-    stopCamera = null;
+    R.closeCamera(camStream);
+    camStream = null;
     if (stage === "summary") reset();
   },
 
@@ -244,8 +253,8 @@ export default {
     demo() {
       abort?.abort();
       abort = null;
-      stopCamera?.();
-      stopCamera = null;
+      R.closeCamera(camStream);
+      camStream = null;
       stage = "waiting";
       job = { kind: "demo", kindLabel: "демонстрационный чек", startedLabel: "без обращения наружу" };
       touch();
@@ -332,7 +341,10 @@ async function startJob(kind, submit, label) {
     }
 
     acceptLines(answer.lines ?? [], {
-      store: answer.store ?? "магазин",
+      // Empty means the page did not name a shop. Filling it with "магазин"
+      // made every receipt look like it came from the same place, which is how
+      // the price comparison ended up with nothing to compare.
+      store: (answer.store ?? "").trim() || null,
       total: answer.total ?? null,
       at: answer.at ?? null,
       source: answer.source ?? null,
@@ -352,7 +364,12 @@ function acceptLines(rawLines, meta) {
   queue = parsed.disputed;
   cursor = 0;
   learned = [];
-  job = { ...job, storeLabel: `${meta.store}${meta.total ? ` · ${fmtMoney(meta.total)}` : ""}` };
+  job = {
+    ...job,
+    storeLabel: [meta.store ?? "магазин не назван", meta.total ? fmtMoney(meta.total) : null]
+      .filter(Boolean)
+      .join(" · "),
+  };
   job.meta = meta;
 
   if (!queue.length) finishReceipt();
@@ -364,7 +381,7 @@ function acceptLines(rawLines, meta) {
 
 /** Write everything the receipt produced: stock, list removals, learned rules, history. */
 function finishReceipt() {
-  const meta = job?.meta ?? { store: "магазин", total: null };
+  const meta = job?.meta ?? { store: null, total: null };
   // The summary says "сроки посчитаны от даты чека", so use it when the till
   // gave one — a receipt scanned a day late would otherwise date from today.
   const stamped = meta.at ? M.today(Date.parse(meta.at)) : null;

@@ -10,10 +10,11 @@ import { html, raw, icon, esc, toast, wide, fmtDate } from "../lib/dom.js";
 import { commit, uid, touch, get, replace } from "../lib/state.js";
 import { demoState, reset as resetStore, EMPTY_STATE, size as stateSize } from "../lib/store.js";
 import * as log from "../lib/log.js";
+import * as INSTALL from "../lib/install.js";
 import { copy as copyText } from "../lib/share.js";
 import * as M from "../lib/model.js";
 import * as gh from "../lib/github.js";
-import { sync, pullReferences, pullRecipes } from "../lib/sync.js";
+import { sync, pullReferences, pullRecipes, referenceReport } from "../lib/sync.js";
 import { parseShelf, parseSynonyms, parseAisles, parseRecipe } from "../lib/vault.js";
 
 let checking = false;
@@ -110,6 +111,41 @@ function journalPane(state) {
   </section>`;
 }
 
+/**
+ * How to keep the app — and why it is not decoration.
+ *
+ * Safari clears an ordinary site's storage after seven idle days, and this app
+ * keeps the list, the stock and the access token there. Installed to the home
+ * screen it is exempt. Explaining another app's interface is already the house
+ * style here: the token instructions do exactly the same for GitHub.
+ */
+function installPane() {
+  if (INSTALL.installed()) {
+    return html`<section class="pane">
+      <div class="label">Установлено</div>
+      <p class="prose">Приложение открыто с домашнего экрана. Данные в этом режиме браузер не чистит, офлайн работает целиком.</p>
+    </section>`;
+  }
+
+  const how = INSTALL.canPrompt()
+    ? html`<button class="btn" type="button" data-act="install">Добавить на домашний экран</button>`
+    : INSTALL.isIOS()
+      ? html`<ol class="prose howto">
+          <li>Нажми «Поделиться» в нижней панели Safari.</li>
+          <li>Выбери «На экран «Домой»».</li>
+        </ol>`
+      : html`<ol class="prose howto">
+          <li>Открой меню браузера.</li>
+          <li>Выбери «Установить приложение» или «Добавить на главный экран».</li>
+        </ol>`;
+
+  return html`<section class="pane">
+    <div class="label">Открывать с телефона</div>
+    <p class="prose">Пока это обычная вкладка, Safari стирает всё её хранилище после семи дней без визитов — вместе со списком, складом и ключом доступа. С домашнего экрана то же приложение живёт без этого правила и открывается офлайн.</p>
+    ${raw(how)}
+  </section>`;
+}
+
 /* ---------- phone ---------- */
 
 function phone(state) {
@@ -167,6 +203,7 @@ function phone(state) {
         </div>
       </section>
 
+      ${raw(installPane())}
       ${raw(journalPane(state))}
 
       <section class="pane pane--alarm">
@@ -543,9 +580,12 @@ export default {
 
     forgetRule(el) {
       commit("rules.forget", (s) => {
+        // A deletion has to leave a mark, or the repository still holds the rule
+        // and the next sync quietly puts it back.
         delete s.rules[el.dataset.raw];
-        return null;
-      }, { sync: false });
+        s.rulesGone = { ...(s.rulesGone ?? {}), [el.dataset.raw]: Date.now() };
+        return { kind: "rules", id: el.dataset.raw };
+      });
       cursor = -1;
       toast("Правило забыто, в следующий раз спрошу снова");
     },
@@ -599,6 +639,12 @@ export default {
       }
     },
 
+    async install() {
+      const ok = await INSTALL.prompt();
+      touch();
+      if (ok) toast("Готово — открывай с домашнего экрана");
+    },
+
     async copyLog() {
       const text = log.asText();
       if (!text) return toast("Журнал пуст");
@@ -615,22 +661,34 @@ export default {
 
     async pullRefs() {
       try {
-        const [refs, recipeFiles] = await Promise.all([pullReferences(), pullRecipes()]);
-        const parsedRecipes = recipeFiles.map((f) => parseRecipe(f.name, f.text)).filter((r) => r.ingredients.length);
+        const [refs, recipes] = await Promise.all([pullReferences(), pullRecipes()]);
+        const parsedRecipes = recipes.files.map((f) => parseRecipe(f.name, f.text)).filter((r) => r.ingredients.length);
 
         commit("refs.pull", (s) => {
-          if (refs.shelf) s.shelf = parseShelf(refs.shelf);
-          if (refs.synonyms) {
-            const { synonyms, junk } = parseSynonyms(refs.synonyms);
+          // Only what was actually read is applied. A file that failed leaves
+          // the table it feeds alone — overwriting it with nothing would turn a
+          // permissions problem into data loss.
+          if (refs.shelf.status === "read") {
+            s.shelf = parseShelf(refs.shelf.text);
+            // Everything the audit learned goes back on top: the vault table is
+            // the starting point, not the last word on how long things last here.
+            for (const [product, days] of Object.entries(s.shelfLearned ?? {})) {
+              const row = s.shelf.find((e) => e.product === product);
+              if (row && days > row.closed) row.closed = days;
+            }
+          }
+          if (refs.synonyms.status === "read") {
+            const { synonyms, junk } = parseSynonyms(refs.synonyms.text);
             s.synonyms = synonyms;
             s.junk = junk;
           }
-          if (refs.aisles) s.aisles = parseAisles(refs.aisles);
+          if (refs.aisles.status === "read") s.aisles = parseAisles(refs.aisles.text);
           if (parsedRecipes.length) s.recipes = parsedRecipes;
           return null;
         }, { sync: false });
 
-        toast(`Справочники обновлены${parsedRecipes.length ? ` · ${parsedRecipes.length} рецептов` : ""}`);
+        const report = referenceReport(refs, recipes);
+        toast(report.text, report.tone);
       } catch (err) {
         toast(`Не удалось прочитать волт: ${err.message}`, "alarm");
       }

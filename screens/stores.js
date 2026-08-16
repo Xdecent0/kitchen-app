@@ -30,6 +30,9 @@ function matrix(state, days = window_) {
       if (!products.has(key)) products.set(key, { product: key, byStore: new Map(), seen: 0 });
 
       const row = products.get(key);
+      // Unnamed receipts carry prices but no shop, so they cannot join a
+      // comparison between shops without inventing one.
+      if (!receipt.store) continue;
       if (!row.byStore.has(receipt.store)) row.byStore.set(receipt.store, []);
       row.byStore.get(receipt.store).push(line.price);
       row.seen += 1;

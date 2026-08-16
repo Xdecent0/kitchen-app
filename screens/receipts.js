@@ -32,7 +32,7 @@ export default {
       return html`<div class="receipt">
         <button class="row" type="button" data-act="toggle" data-id="${receipt.id}" aria-expanded="${expanded}">
           <span class="row-main">
-            <span class="row-name">${receipt.store}</span>
+            <span class="row-name">${receipt.store || "магазин не назван"}</span>
             <span class="row-why">${fmtDate(receipt.at)} · ${lines.length} ${M.plural(lines.length, "позиция", "позиции", "позиций")}</span>
           </span>
           <span class="row-qty num">${fmtMoney(receipt.total)}</span>

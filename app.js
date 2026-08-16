@@ -4,6 +4,7 @@
 import { $, html, raw, icon, toast, wide, setCurrency } from "./lib/dom.js";
 import { get, subscribe, guardUnload, whenSaveFails } from "./lib/state.js";
 import * as log from "./lib/log.js";
+import * as install from "./lib/install.js";
 import { demoState, isFresh, stripDemo } from "./lib/store.js";
 import { replace } from "./lib/state.js";
 import * as M from "./lib/model.js";
@@ -56,6 +57,10 @@ let current = { name: "list", arg: null };
    that can throw — including the demo seed below. */
 log.captureGlobals();
 guardUnload();
+/* The browser fires this once, early, and only sometimes — so it is caught
+   before anything else and the offer waits for the screen that explains it. */
+install.watch();
+install.whenChanged(() => render());
 
 /**
  * Persistence stopped working. Until now this was reported to nobody: the hook

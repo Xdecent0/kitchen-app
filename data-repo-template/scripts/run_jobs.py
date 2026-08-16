@@ -88,24 +88,114 @@ def parse_receipt_html(body: str) -> dict:
         name = cells[0]
         if not name or len(name) < 3 or looks_like_total(name):
             continue
+        # A metadata row — "Найменування | Сільпо-Фуд" — is not a purchase, and
+        # putting the shop's own name on the shelf is a strange kind of grocery.
+        if any(label in name.lower() for label in SELLER_LABELS):
+            continue
 
         price = next((normalize_price(c) for c in reversed(cells[1:]) if normalize_price(c)), None)
         qty = next((c for c in cells[1:] if re.search(r"\d\s*(шт|кг|г|л|мл)", c, re.I)), None)
         lines.append({"name": name, "qty": qty, "price": price})
 
-    store = ""
-    title = soup.find(["h1", "h2", "title"])
-    if title:
-        store = title.get_text(" ", strip=True)[:60]
-
     if not lines:
         raise ValueError("страница чека не содержит позиций — возможно, магазин их не публикует")
 
-    return {"lines": lines, "store": store or "магазин", "total": None}
+    text = soup.get_text(" ", strip=True)
+
+    return {
+        "lines": lines,
+        "store": find_seller(soup, text),
+        "total": find_total(soup),
+        "at": find_date(text),
+    }
+
+
+# The tax cabinet's <title> is the cabinet's own name, identical on every receipt.
+# Taking it as the shop meant bestStore stayed null forever, the trip could never
+# be split by store, and the whole price matrix rendered empty. Better to say
+# nothing than to say the same wrong thing every time.
+CABINET_WORDS = ("кабінет", "кабинет", "податков", "налогов", "чек", "quittance", "фіскальн", "фискальн")
+
+SELLER_LABELS = ("продавець", "продавец", "найменування", "наименование", "торгов", "магазин", "фоп", "тов ")
+
+
+QUOTE_PAIRS = (('"', '"'), ("'", "'"), ("«", "»"), ("„", "“"))
+
+
+def unquote(text: str) -> str:
+    """Drop quotes only in matched pairs, so ТОВ "АТБ" keeps both of its own."""
+    for left, right in QUOTE_PAIRS:
+        if len(text) > 1 and text.startswith(left) and text.endswith(right):
+            return text[1:-1].strip()
+    return text
+
+
+def find_seller(soup, text: str) -> str:
+    """The shop's name, or an honest nothing.
+
+    Read from the element that carries the label, not from the whole page: the
+    cabinet renders one long run of text, and a pattern let loose on it happily
+    swallowed the date and the first product into the shop's name.
+    """
+    for el in soup.find_all(["td", "th", "p", "div", "span", "li"]):
+        line = el.get_text(" ", strip=True)
+        if not line or len(line) > 120:
+            continue
+
+        lowered = line.lower()
+        for label in SELLER_LABELS:
+            at = lowered.find(label)
+            if at < 0:
+                continue
+            found = unquote(line[at + len(label):].strip(" :;,-—"))
+
+            # A table puts the label in one cell and the answer in the next, so
+            # the remainder of the labelled cell is empty and the name is next door.
+            if not found and el.name in ("td", "th"):
+                sibling = el.find_next_sibling(["td", "th"])
+                if sibling:
+                    found = unquote(sibling.get_text(" ", strip=True))
+
+            if 3 <= len(found) <= 60 and not any(w in found.lower() for w in CABINET_WORDS):
+                return found
+
+    for tag in soup.find_all(["h1", "h2"]):
+        found = tag.get_text(" ", strip=True)
+        if 3 <= len(found) <= 60 and not any(w in found.lower() for w in CABINET_WORDS):
+            return found
+
+    return ""
+
+
+MONEY = re.compile(r"(\d[\d\s ]*[.,]\d{2})")
+
+
+def find_total(soup) -> float | None:
+    """The line that calls itself a total, not the largest number on the page."""
+    for row in soup.select("tr"):
+        cells = [c.get_text(" ", strip=True) for c in row.select("td", limit=8)]
+        if not cells or not looks_like_total(cells[0]):
+            continue
+        for cell in reversed(cells[1:]):
+            value = normalize_price(cell)
+            if value:
+                return value
+    return None
+
+
+def find_date(text: str) -> str | None:
+    """The date printed on the page, in the same shape receipt_date returns."""
+    dmy = DMY_DATE.search(text)
+    if dmy:
+        return f"{dmy.group(3)}-{dmy.group(2)}-{dmy.group(1)}"
+    iso = ISO_DATE.search(text)
+    if iso:
+        return f"{iso.group(1)}-{iso.group(2)}-{iso.group(3)}"
+    return None
 
 
 ISO_DATE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
-DMY_DATE = re.compile(r"(\d{2})[.\-/](\d{2})[.\-/](\d{4})")
+DMY_DATE = re.compile(r"\b(\d{2})[.\-/](\d{2})[.\-/](\d{4})\b")
 
 
 def receipt_date(doc: dict) -> str | None:
@@ -370,5 +460,59 @@ def main() -> int:
     return 0
 
 
+def selftest() -> int:
+    """The receipt pages this has to survive, as code rather than as a memory.
+
+    Every case here is something that was actually wrong: the cabinet's own name
+    taken for the shop, a date pattern that could never match because an invisible
+    control character had crept into the source, a metadata row filed as a
+    grocery, and a page that names no shop at all — which must stay unnamed
+    rather than be filled in with a plausible lie.
+    """
+    cases = [
+        (
+            "украинская страница кабинета",
+            """<html><head><title>Кабінет — Чек</title></head><body>
+               <p>Продавець: ТОВ "АТБ-МАРКЕТ"</p><p>Дата: 14.08.2026 19:42</p>
+               <table><tr><td>МОЛОКО СЕЛЯНСЬКЕ 2,5%</td><td>1 шт</td><td>44,90</td></tr>
+               <tr><td>СУМА ДО СПЛАТИ</td><td></td><td>44,90</td></tr></table></body></html>""",
+            {"store": 'ТОВ "АТБ-МАРКЕТ"', "total": 44.9, "at": "2026-08-14", "count": 1},
+        ),
+        (
+            "продавец в соседней ячейке",
+            """<html><body><table><tr><td>Найменування</td><td>Сільпо-Фуд</td></tr>
+               <tr><td>ХЛІБ ДАРНИЦЬКИЙ</td><td>1 шт</td><td>32,00</td></tr></table>
+               <div>2026-08-11</div></body></html>""",
+            {"store": "Сільпо-Фуд", "total": None, "at": "2026-08-11", "count": 1},
+        ),
+        (
+            "магазин не назван — и не выдумывается",
+            """<html><head><title>Електронний кабінет платника</title></head><body>
+               <table><tr><td>ХЛІБ</td><td>1 шт</td><td>32,00</td></tr></table></body></html>""",
+            {"store": "", "total": None, "at": None, "count": 1},
+        ),
+    ]
+
+    failed = 0
+    for name, html, want in cases:
+        got = parse_receipt_html(html)
+        checks = {
+            "store": got["store"],
+            "total": got["total"],
+            "at": got["at"],
+            "count": len(got["lines"]),
+        }
+        for key, expected in want.items():
+            if checks[key] != expected:
+                failed += 1
+                print(f"ПРОВАЛ {name}: {key} = {checks[key]!r}, ожидалось {expected!r}", file=sys.stderr)
+
+    if not failed:
+        print(f"selftest: {len(cases)} страницы разобраны верно")
+    return 1 if failed else 0
+
+
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        raise SystemExit(selftest())
     raise SystemExit(main())

@@ -77,6 +77,12 @@ export default {
 
   async mount() {
     if (finishedFor) return;
+
+    // mount() runs on every render, and a wake lock is released by the system
+    // whenever the tab is hidden — so it has to be re-taken, but only when the
+    // one in hand is actually gone. Requesting on every render leaked locks.
+    if (wakeLock && !wakeLock.released) return;
+
     try {
       wakeLock = await navigator.wakeLock?.request("screen");
     } catch {

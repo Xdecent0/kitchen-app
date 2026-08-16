@@ -2522,10 +2522,16 @@ kbd {
 }
 
 /* Narrow desktop used to hide the feeder outright, which left a whole band of
-   window widths with no suggestions at all. It gets narrower, not absent. */
+   window widths with no suggestions at all. Everything gives up a little instead
+   — the field in the middle is the point of the screen and must stay the widest
+   of the three, which it was not when only the feeder came back. */
 @media (max-width: 1200px) {
+  :root {
+    --inspector: 264px;
+  }
+
   .feedwrap {
-    width: 208px;
+    width: 188px;
   }
 }
 
@@ -2574,6 +2580,16 @@ kbd {
 .notice--link:focus-visible {
   background: var(--surface-2, var(--surface));
   color: var(--ink);
+}
+
+/* Instructions for someone else's interface: numbered, because they are steps
+   taken in order, and indented enough that the numbers read as a sequence. */
+.howto {
+  margin: 10px 0 14px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .empty--tight {

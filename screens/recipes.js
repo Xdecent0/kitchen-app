@@ -12,7 +12,7 @@ import { rank, filterRecipes, match, shoppingGap } from "../lib/recipes.js";
 import { alive } from "./stock.js";
 import { lastPrice } from "../lib/trip.js";
 import * as gh from "../lib/github.js";
-import { parseRecipe } from "../lib/vault.js";
+import { parseRecipe, recipeToMarkdown } from "../lib/vault.js";
 
 let filter = "burning";
 let importing = false;
@@ -365,12 +365,24 @@ export default {
         if (answer.error) throw new Error(answer.error);
 
         const recipe = parseRecipe(answer.name ?? "Рецепт", answer.markdown ?? "");
+
+        // The vault is where recipes live: the Action only writes its answer into
+        // Задания/выход, and the next "Обновить справочники" replaces the whole
+        // list with whatever is in Рецепты/ — so a recipe that never got written
+        // there simply disappeared, having been promised a note in the vault.
+        // Written first, on purpose: state that outlives the write is a lie.
+        await gh.writeFile(
+          `Рецепты/${recipe.name.replace(/[\\/:*?"<>|]/g, "-")}.md`,
+          recipeToMarkdown(recipe),
+          { message: `kitchen: рецепт «${recipe.name}»` }
+        );
+
         commit("recipes.import", (s) => {
           s.recipes = [recipe, ...s.recipes.filter((r) => r.id !== recipe.id)];
-          return { kind: "recipes", id: recipe.id };
-        });
+          return null;
+        }, { sync: false });
 
-        toast(`«${recipe.name}» добавлен`);
+        toast(`«${recipe.name}» добавлен и записан в волт`);
       } catch (err) {
         toast(`Импорт не вышел: ${err.message}`, "alarm");
       } finally {

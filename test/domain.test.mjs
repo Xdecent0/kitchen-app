@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import * as M from "../lib/model.js";
 import { sameProduct, findInStock, match, rank, stepDown, lineMatchesProduct } from "../lib/recipes.js";
 import { purchaseRhythm } from "../lib/model.js";
-import { mergeById, mergeHistory, mergeGone, dropTombstones } from "../lib/sync.js";
+import { mergeById, mergeHistory, mergeGone, dropTombstones, shouldAutoSync, shouldAutoPull, referenceReport, mergeRules, mergeStamps, mergeLongest, foldClosed } from "../lib/sync.js";
 import { unchanged } from "../lib/github.js";
 import { candidates } from "../lib/trip.js";
 import * as log from "../lib/log.js";
@@ -646,4 +646,160 @@ test("снятое подрезается по возрасту, как любо
   const now = Date.UTC(2026, 7, 15);
   const merged = mergeGone({ Молоко: [now - 400 * DAY, now - 10 * DAY] }, {}, 365, now);
   assert.deepEqual(merged.Молоко, [now - 10 * DAY]);
+});
+
+/* ---------- честность отчёта по справочникам ---------- */
+
+test("отказ доступа не выдаётся за отсутствие файла", () => {
+  // 401 от протухшего токена, 403 от ключа не на тот репозиторий и настоящий
+  // 404 приходили одинаково — пустотой, — а интерфейс в любом случае говорил
+  // «Справочники обновлены», и человек шёл искать ошибку в таблице, которую
+  // приложение не читало.
+  const refs = {
+    shelf: { status: "failed", error: "401" },
+    synonyms: { status: "read", text: "" },
+    aisles: { status: "missing" },
+  };
+
+  const r = referenceReport(refs, { status: "read", files: [] });
+  assert.equal(r.tone, "alarm");
+  assert.match(r.text, /Не удалось прочитать: сроки/);
+});
+
+test("прочитанное называется поимённо, ненайденное — отдельно", () => {
+  const refs = {
+    shelf: { status: "read", text: "" },
+    synonyms: { status: "read", text: "" },
+    aisles: { status: "missing" },
+  };
+
+  const r = referenceReport(refs, { status: "read", files: [{ name: "Сырники", text: "x" }] });
+  assert.equal(r.tone, "calm");
+  assert.match(r.text, /Прочитано: сроки, синонимы, рецепты · 1/);
+  assert.match(r.text, /не найдено: отделы/);
+});
+
+test("пустой репозиторий не выдаётся за успех", () => {
+  const refs = {
+    shelf: { status: "missing" },
+    synonyms: { status: "missing" },
+    aisles: { status: "missing" },
+  };
+
+  assert.equal(referenceReport(refs, { status: "missing", files: [] }).tone, "alarm");
+});
+
+/* ---------- наблюдающее устройство ---------- */
+
+test("устройство без своих правок всё равно ходит смотреть", () => {
+  // Раньше гейт отправки требовал непустую очередь, поэтому телефон, который
+  // ничего не менял, не подтягивал ничего: весь пер-записный merge, написанный
+  // ради двоих в магазине, у второго не запускался ни разу.
+  const base = { configured: true, demo: false, online: true, busy: false, now: 1_000_000 };
+
+  assert.equal(shouldAutoSync({ ...base, queued: 0, lastAttempt: 0 }), false, "отправлять нечего");
+  assert.equal(shouldAutoPull({ ...base, lastPull: 0 }), true, "а посмотреть — есть зачем");
+});
+
+test("смотреть — реже, чем отправлять", () => {
+  const base = { configured: true, demo: false, online: true, busy: false, now: 1_000_000 };
+  assert.equal(shouldAutoPull({ ...base, lastPull: base.now - 120_000 }), false, "две минуты назад — рано");
+  assert.equal(shouldAutoPull({ ...base, lastPull: base.now - 300_000 }), true, "пять минут — пора");
+});
+
+test("демо наружу не ходит ни при каких условиях", () => {
+  const base = { configured: true, demo: true, online: true, busy: false, now: 1_000_000, lastPull: 0 };
+  assert.equal(shouldAutoPull(base), false);
+});
+
+/* ---------- забытое правило и выученные сроки ---------- */
+
+test("забытое правило не воскресает на следующем круге", () => {
+  // {...remote, ...local} не умеет выражать удаление: забытого ключа локально
+  // нет, поэтому побеждала копия из репозитория — и «Забыть правило» отменялось
+  // первым же синком.
+  const local = { "МЛК ПРОСТ": "Молоко" };
+  const remote = { "МЛК ПРОСТ": "Молоко", "СЫРОК ГЛАЗИР": "Глазированный сырок" };
+  const gone = { "СЫРОК ГЛАЗИР": 2000 };
+
+  const merged = mergeRules(local, remote, gone);
+  assert.deepEqual(Object.keys(merged), ["МЛК ПРОСТ"]);
+});
+
+test("локальное правило бьёт удалённое при одном и том же ключе", () => {
+  const merged = mergeRules({ "МЛК": "Молоко деревенское" }, { "МЛК": "Молоко" });
+  assert.equal(merged["МЛК"], "Молоко деревенское");
+});
+
+test("выученный срок берётся самый длинный из наблюдавшихся", () => {
+  // Обе стороны сообщают о продукте, который реально столько прожил.
+  assert.deepEqual(mergeLongest({ Сыр: 70 }, { Сыр: 45, Творог: 6 }), { Сыр: 70, Творог: 6 });
+});
+
+test("забытые правила подрезаются по возрасту", () => {
+  const now = Date.UTC(2026, 7, 15);
+  const merged = mergeStamps({ старое: now - 400 * DAY, свежее: now - DAY }, {}, 365, now);
+  assert.deepEqual(Object.keys(merged), ["свежее"]);
+});
+
+/* ---------- склад не растёт вечно ---------- */
+
+test("закрытая три месяца назад позиция сворачивается в надгробие", () => {
+  // Закрытые позиции только помечались empty и не удалялись никогда: год
+  // покупок оставался в файле в полную ширину, а файл читается и переписывается
+  // на каждом синке.
+  const now = Date.UTC(2026, 7, 15);
+  const rows = [
+    { id: "a", product: "Творог 5%", qty: "400 г", zone: "холодильник", empty: true, closedAt: now - 120 * DAY, at: now - 120 * DAY },
+    { id: "b", product: "Кефир", qty: "1 л", zone: "холодильник", empty: true, closedAt: now - 10 * DAY, at: now - 10 * DAY },
+    { id: "c", product: "Молоко", qty: "2 л", zone: "холодильник", boughtAt: now - DAY },
+  ];
+
+  const folded = foldClosed(rows, 90, now);
+  assert.deepEqual(folded[0], { id: "a", deleted: true, deletedAt: now - 120 * DAY, at: now - 120 * DAY });
+  assert.equal(folded[1].product, "Кефир", "недавно закрытая ещё видна на складе");
+  assert.equal(folded[2].product, "Молоко", "живая не трогается");
+});
+
+test("свёрнутая позиция не воскресает со второго устройства", () => {
+  // Смысл надгробия: id остаётся, и старая копия не может вернуть строку.
+  const now = Date.UTC(2026, 7, 15);
+  const tomb = { id: "a", deleted: true, deletedAt: now - 120 * DAY, at: now - 120 * DAY };
+  const stale = { id: "a", product: "Творог 5%", empty: true, at: now - 200 * DAY };
+
+  assert.equal(mergeById([tomb], [stale])[0].deleted, true);
+});
+
+/* ---------- украинская касса ---------- */
+
+test("украинская строка чека распознаётся так же, как русская", () => {
+  // Магазины — АТБ и Сільпо, печатают по-украински. Без этих масок «СИР
+  // КИСЛОМОЛ» не совпадал ни с чем, уходил в спорные с доверием 0.4 и —
+  // хуже — не находил срока годности: продукт не горел и не попадал в ревизию
+  // никогда.
+  assert.equal(M.normalize("СИР КИСЛОМОЛ 9% 350Г", refs).product, "Творог");
+  assert.equal(M.normalize("МОЛОКО СЕЛЯНСЬКЕ 2,5%", refs).product, "Молоко");
+  assert.equal(M.normalize("ЯЙЦЯ КУРЯЧІ С0 10ШТ", refs).product, "Яйца");
+  assert.equal(M.normalize("КАРТОПЛЯ МИТА ВАГ", refs).product, "Картофель");
+  assert.equal(M.normalize("ЦИБУЛЯ РІПЧАСТА", refs).product, "Лук");
+  assert.equal(M.normalize("ОЛІЯ СОНЯШНИКОВА 1Л", refs).product, "Растительное масло");
+});
+
+test("украинский творог не съедается маской сыра", () => {
+  // Тот же порядок, что и у СЫР/СЫРОК: частная маска обязана стоять выше общей.
+  assert.equal(M.normalize("СИР КИСЛОМОЛ", refs).product, "Творог");
+  assert.equal(M.normalize("СИР ТВЕРДИЙ ГОЛЛАНД", refs).product, "Сыр");
+});
+
+test("украинский мусор чека не попадает на склад", () => {
+  for (const junk of ["ЗНИЖКА НА ТОВАР", "СУМА ДО СПЛАТИ", "ГОТІВКА", "РЕШТА", "ПДВ 20%"]) {
+    assert.equal(M.normalize(junk, refs).product, null, junk);
+  }
+});
+
+test("найденный по украинской маске продукт получает срок годности", () => {
+  // Ради этого всё и делалось: маска отдаёт русское имя продукта, а справочник
+  // сроков говорит на нём же.
+  const line = M.normalize("СИР КИСЛОМОЛ 9%", refs);
+  assert.equal(M.shelfLife(line.product.toLowerCase(), SEED_SHELF, {}).days, 5);
 });

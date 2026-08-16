@@ -192,7 +192,14 @@ function apply() {
         const ref = s.shelf
           .filter((e) => oldest.product.toLowerCase().includes(e.product))
           .sort((a, b) => b.product.length - a.product.length)[0];
-        if (ref && lived && lived > ref.closed) ref.closed = lived;
+
+        if (ref && lived && lived > ref.closed) {
+          ref.closed = lived;
+          // s.shelf is a copy of a vault table and gets replaced wholesale by
+          // «Обновить справочники» — so what was learned here is kept separately
+          // and laid back on top, instead of being quietly thrown away.
+          s.shelfLearned = { ...(s.shelfLearned ?? {}), [ref.product]: Math.max(lived, s.shelfLearned?.[ref.product] ?? 0) };
+        }
 
         for (const row of rows) {
           if (lived) row.shelfDays = Math.max(row.shelfDays ?? 0, lived + 2);

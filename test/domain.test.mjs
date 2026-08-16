@@ -12,6 +12,8 @@ import { purchaseRhythm } from "../lib/model.js";
 import { mergeById, mergeHistory, mergeGone, dropTombstones, shouldAutoSync, shouldAutoPull, referenceReport, mergeRules, mergeStamps, mergeLongest, foldClosed } from "../lib/sync.js";
 import { unchanged } from "../lib/github.js";
 import { candidates } from "../lib/trip.js";
+import { encodePairing, parsePairing } from "../lib/pair.js";
+import { encode, versionFor } from "../lib/qr.js";
 import * as log from "../lib/log.js";
 import { parseTable, parseShelf, parseSynonyms, parseRecipe } from "../lib/vault.js";
 import { priceHistory, bestStore, trackingSummary, weekStart, staples } from "../lib/planning.js";
@@ -802,4 +804,46 @@ test("найденный по украинской маске продукт п�
   // сроков говорит на нём же.
   const line = M.normalize("СИР КИСЛОМОЛ 9%", refs);
   assert.equal(M.shelfLife(line.product.toLowerCase(), SEED_SHELF, {}).days, 5);
+});
+
+/* ---------- перенос ключа на телефон ---------- */
+
+test("код подключения собирается и разбирается обратно", () => {
+  const cfg = { repo: "Xdecent0/kitchen-data", branch: "main", token: "github_pat_11ABC_xyz", name: "Тимофій" };
+  const parsed = parsePairing(encodePairing(cfg));
+  assert.deepEqual(parsed, cfg);
+});
+
+test("ветка по умолчанию не теряется", () => {
+  const parsed = parsePairing(encodePairing({ repo: "a/b", token: "t" }));
+  assert.equal(parsed.branch, "main");
+  assert.equal(parsed.name, "");
+});
+
+test("чужой QR не принимается за ключ", () => {
+  // Камера видит чеки, афиши и наклейки на посылках. Ни одно из этого не должно
+  // подставиться в настройки — и не должно считаться ошибкой.
+  assert.equal(parsePairing("https://cabinet.tax.gov.ua/check?id=42"), null);
+  assert.equal(parsePairing(""), null);
+  assert.equal(parsePairing("kitchen1\tне-репозиторий\tmain\tтокен\t"), null, "имя репозитория проверяется");
+  assert.equal(parsePairing("kitchen1\ta/b\tmain\t\t"), null, "без ключа переносить нечего");
+});
+
+test("табуляция в имени не ломает разбор", () => {
+  const parsed = parsePairing(encodePairing({ repo: "a/b", token: "t", name: "Ан\tна" }));
+  assert.equal(parsed.name, "Ан на");
+});
+
+test("QR-код собирается для полезной нагрузки любого размера", () => {
+  // Версия выбирается по длине; ключ плюс репозиторий — около 140 байт.
+  assert.equal(versionFor(9), 1);
+  assert.equal(versionFor(134), 6);
+  assert.equal(versionFor(150), 7);
+  assert.equal(versionFor(230), 9);
+  assert.equal(versionFor(400), null, "выше девятой версии не кодируем");
+
+  const code = encode(encodePairing({ repo: "Xdecent0/kitchen-data", token: "github_pat_" + "x".repeat(82), name: "Тимофій" }));
+  assert.equal(code.size, code.version * 4 + 17);
+  assert.equal(code.get(0, 0), 1, "левый верхний глаз на месте");
+  assert.equal(code.get(8, code.size - 8), 1, "тёмный модуль на месте");
 });

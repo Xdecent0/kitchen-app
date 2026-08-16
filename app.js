@@ -24,6 +24,7 @@ import stores from "./screens/stores.js";
 import tracking from "./screens/tracking.js";
 import receiptsScreen from "./screens/receipts.js";
 import settings from "./screens/settings.js";
+import pair from "./screens/pair.js";
 
 const SCREENS = {
   list,
@@ -39,6 +40,7 @@ const SCREENS = {
   tracking,
   receipts: receiptsScreen,
   settings,
+  pair,
 };
 
 const NAV = [

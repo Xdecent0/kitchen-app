@@ -11,6 +11,8 @@ import { commit, uid, touch, get, replace } from "../lib/state.js";
 import { demoState, reset as resetStore, EMPTY_STATE, size as stateSize } from "../lib/store.js";
 import * as log from "../lib/log.js";
 import * as INSTALL from "../lib/install.js";
+import * as QR from "../lib/qr.js";
+import { encodePairing } from "../lib/pair.js";
 import { copy as copyText } from "../lib/share.js";
 import * as M from "../lib/model.js";
 import * as gh from "../lib/github.js";
@@ -19,6 +21,8 @@ import { parseShelf, parseSynonyms, parseAisles, parseRecipe } from "../lib/vaul
 
 let checking = false;
 let checkResult = null;
+/** The pairing code holds a live key, so it is never on screen unless asked for. */
+let pairing = false;
 let section = "connect";
 let cursor = -1;
 
@@ -54,6 +58,47 @@ function countOf(key, state) {
 }
 
 /* ---------- pieces shared by both layouts ---------- */
+
+/**
+ * Move the key to the phone without anyone typing it.
+ *
+ * Ninety-odd characters of random base62 on a phone keyboard is the worst
+ * minute in the app and it is the first one. The machine that already holds the
+ * key draws it; the phone reads it with the camera it already uses. The payload
+ * is a live credential, so it is drawn only on request and only here — it never
+ * touches the repository, a job file or the journal.
+ */
+function pairingBlock(cfg) {
+  if (!gh.isConfigured()) {
+    return html`<div class="setpane-note">
+      <p class="prose">Ключ уже есть на другом устройстве? Считай код с его экрана — вводить ничего не придётся.</p>
+      <a class="btn btn--ghost btn--sm" href="#pair">Считать код с компьютера</a>
+    </div>`;
+  }
+
+  if (!pairing) {
+    return html`<div class="setpane-note">
+      <p class="prose">Второе устройство подключается кодом с этого экрана — ключ переносится камерой, руками ничего вводить не нужно.</p>
+      <button class="btn btn--ghost btn--sm" type="button" data-act="pairShow">Показать код для телефона</button>
+    </div>`;
+  }
+
+  let svg;
+  try {
+    svg = QR.toSvg(encodePairing({ ...cfg, name: gh.identity().name }), { scale: 4 });
+  } catch (err) {
+    return html`<p class="prose prose--alarm">Код не собрался: ${err.message}</p>`;
+  }
+
+  return html`<div class="pairing">
+    <div class="pairing-code">${raw(svg)}</div>
+    <div class="pairing-note">
+      <p class="prose">На телефоне: Настройки → «Считать код с компьютера», навести камеру.</p>
+      <p class="prose prose--alarm">В коде лежит действующий ключ с правом записи в твой приватный репозиторий. Не показывай его на общем экране и не фотографируй.</p>
+      <button class="btn btn--ghost btn--sm" type="button" data-act="pairHide">Скрыть код</button>
+    </div>
+  </div>`;
+}
 
 function connectForm(cfg, { compact = false } = {}) {
   return html`<form class="stack${compact ? " stack--tight" : ""}" data-act-submit="connect">
@@ -112,36 +157,45 @@ function journalPane(state) {
 }
 
 /**
- * How to keep the app — and why it is not decoration.
+ * Install it properly — the difference between a bookmark and an app.
  *
- * Safari clears an ordinary site's storage after seven idle days, and this app
- * keeps the list, the stock and the access token there. Installed to the home
- * screen it is exempt. Explaining another app's interface is already the house
- * style here: the token instructions do exactly the same for GitHub.
+ * Explaining another app's interface is already the house style here: the token
+ * instructions do exactly the same for GitHub.
  */
 function installPane() {
   if (INSTALL.installed()) {
     return html`<section class="pane">
       <div class="label">Установлено</div>
-      <p class="prose">Приложение открыто с домашнего экрана. Данные в этом режиме браузер не чистит, офлайн работает целиком.</p>
+      <p class="prose">Открыто как приложение: свой значок, своё окно без адресной строки, отдельная карточка в списке задач. Данные в этом режиме браузер не чистит, офлайн работает целиком.</p>
     </section>`;
   }
 
+  const where = INSTALL.platform();
+
   const how = INSTALL.canPrompt()
-    ? html`<button class="btn" type="button" data-act="install">Добавить на домашний экран</button>`
-    : INSTALL.isIOS()
+    ? html`<button class="btn" type="button" data-act="install">Установить приложение</button>`
+    : where === "android"
       ? html`<ol class="prose howto">
-          <li>Нажми «Поделиться» в нижней панели Safari.</li>
-          <li>Выбери «На экран «Домой»».</li>
+          <li>Меню Chrome — три точки справа сверху.</li>
+          <li>«Установить приложение» (или «Добавить на главный экран»).</li>
         </ol>`
-      : html`<ol class="prose howto">
-          <li>Открой меню браузера.</li>
-          <li>Выбери «Установить приложение» или «Добавить на главный экран».</li>
-        </ol>`;
+      : where === "ios"
+        ? html`<ol class="prose howto">
+            <li>Нажми «Поделиться» в нижней панели Safari.</li>
+            <li>Выбери «На экран «Домой»».</li>
+          </ol>`
+        : html`<ol class="prose howto">
+            <li>Открой меню браузера.</li>
+            <li>Выбери «Установить приложение».</li>
+          </ol>`;
+
+  const why = where === "ios"
+    ? "Пока это обычная вкладка, Safari стирает всё её хранилище после семи дней без визитов — вместе со списком, складом и ключом доступа."
+    : "Установленное, оно получает свой значок в меню приложений, своё окно без адресной строки и отдельную карточку в списке задач. Хранилище перестаёт быть «данными сайта», которые чистятся заодно со всем остальным.";
 
   return html`<section class="pane">
-    <div class="label">Открывать с телефона</div>
-    <p class="prose">Пока это обычная вкладка, Safari стирает всё её хранилище после семи дней без визитов — вместе со списком, складом и ключом доступа. С домашнего экрана то же приложение живёт без этого правила и открывается офлайн.</p>
+    <div class="label">Поставить как приложение</div>
+    <p class="prose">${why} Это и есть «полноценное приложение»: APK сверху добавил бы ключ подписи, который нельзя терять, и сборку — в проект, у которого её нарочно нет.</p>
     ${raw(how)}
   </section>`;
 }
@@ -161,6 +215,7 @@ function phone(state) {
       <section class="pane">
         <div class="label">Репозиторий данных</div>
         <p class="prose">Приложение хранит склад, список и справочники в твоём приватном репозитории на GitHub. Ключ доступа живёт только в этом браузере и никуда больше не уходит.</p>
+        ${raw(pairingBlock(cfg))}
         ${raw(connectForm(cfg))}
         ${raw(checkResult ? `<p class="prose ${checkResult.ok ? "" : "prose--alarm"}">${esc(checkResult.text)}</p>` : "")}
         <details class="note">
@@ -300,6 +355,7 @@ function sectionBody(state) {
       <p class="prose">Приложение хранит склад, список и справочники в твоём приватном репозитории. Ключ живёт только в этом браузере и никуда больше не уходит. Создаёшь и вставляешь его ты сам.</p>
       ${raw(connectForm(cfg, { compact: true }))}
       ${raw(checkResult ? `<p class="prose ${checkResult.ok ? "" : "prose--alarm"}">${esc(checkResult.text)}</p>` : "")}
+      ${raw(pairingBlock(cfg))}
       <details class="note">
         <summary>Где взять ключ</summary>
         <p class="prose">GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens. Доступ дай только репозиторию с данными, права Contents: Read and write.</p>
@@ -547,6 +603,8 @@ export default {
   leave() {
     cursor = -1;
     checkResult = null;
+    // A live key does not stay on screen because someone walked away.
+    pairing = false;
   },
 
   keys(e, state) {
@@ -637,6 +695,16 @@ export default {
       } catch (err) {
         toast(`Не прошло: ${err.message}`, "alarm");
       }
+    },
+
+    pairShow() {
+      pairing = true;
+      touch();
+    },
+
+    pairHide() {
+      pairing = false;
+      touch();
     },
 
     async install() {

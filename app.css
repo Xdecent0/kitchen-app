@@ -2588,6 +2588,48 @@ kbd {
   color: var(--ink);
 }
 
+/* --- код подключения ----------------------------------------------------
+   White quiet zone around the code is not decoration: a scanner needs it, and
+   on the cream ground the code would otherwise bleed into the page. */
+
+.setpane-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 0 2px;
+}
+
+.pairing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 16px 0 4px;
+}
+
+.pairing-code {
+  flex: none;
+  line-height: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pairing-code svg {
+  display: block;
+  width: 232px;
+  height: 232px;
+  image-rendering: pixelated;
+}
+
+.pairing-note {
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 /* Instructions for someone else's interface: numbered, because they are steps
    taken in order, and indented enough that the numbers read as a sequence. */
 .howto {

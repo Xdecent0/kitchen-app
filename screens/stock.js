@@ -31,10 +31,15 @@ let zoneFilter = null;
 let selected = new Set();
 let cursor = 0;
 let query = "";
+/**
+ * How the shelf is laid out: by category (the way a kitchen is talked about),
+ * by zone (the way it is physically stored), or flat by what spoils first.
+ */
+let grouping = "aisle";
 
 export const alive = (state) => state.stock.filter((i) => !i.deleted && !i.empty);
 
-function visible(state) {
+function filtered(state) {
   const now = M.today();
   let items = alive(state);
 
@@ -52,6 +57,44 @@ function visible(state) {
   }
 
   return M.sortByUrgency(items, now);
+}
+
+/**
+ * The shelf in the order it is shown: one nameless run when sorted by expiry,
+ * a run per category otherwise. Inside a category the urgent thing still comes
+ * first — the grouping answers "where is the milk", not "what is fine to forget".
+ */
+function groups(state) {
+  const items = filtered(state);
+
+  if (grouping === "aisle") {
+    return M.groupByAisle(items, state.aisles).map((g) => ({ name: g.name, entries: g.entries }));
+  }
+
+  if (grouping === "zone") {
+    return ZONES
+      .map((zone) => ({ name: zone, entries: items.filter((i) => i.zone === zone) }))
+      .filter((g) => g.entries.length);
+  }
+
+  return [{ name: null, entries: items }];
+}
+
+/** Display order flattened, so the cursor and the keyboard count the same rows the eye does. */
+const visible = (state) => groups(state).flatMap((g) => g.entries);
+
+function groupSwitch() {
+  const options = [
+    ["aisle", "категории"],
+    ["zone", "зоны"],
+    ["urgency", "срок"],
+  ];
+
+  return html`<div class="seg seg--sm" role="group" aria-label="Как раскладывать">
+    <span class="seg-label">раскладка</span>
+    ${raw(options.map(([key, name]) =>
+      `<button class="seg-btn" type="button" data-act="grouping" data-grouping="${key}" aria-pressed="${grouping === key}">${esc(name)}</button>`).join(""))}
+  </div>`;
 }
 
 export function stockRow(itemEntry, now = M.today()) {
@@ -76,15 +119,20 @@ export function stockRow(itemEntry, now = M.today()) {
 /**
  * Typing a product in by hand.
  *
- * One field, because everything else is already known: the reference table says
- * where the thing lives and how long it keeps, and the zone filter — if one is
- * on — says which shelf the person is standing at right now.
+ * Two fields: the name, and how much of it. The rest is already known — the
+ * reference table says where the thing lives and how long it keeps, and the
+ * zone filter, if one is on, says which shelf the person is standing at.
+ *
+ * Quantity is free text on purpose. "1,5 кг", "2 рожка" and "пол упаковки" are
+ * all how a kitchen is actually counted, and a number with a unit dropdown
+ * would refuse two of the three.
  */
 function addbar(flat = false, slim = false) {
   const where = zoneFilter ? ZONE_INTO[zoneFilter] : "на склад";
 
   return html`<form class="addbar${flat ? " addbar--flat" : ""}${slim ? " addbar--slim" : ""}" data-act-submit="add">
     <input class="field" name="product" placeholder="Добавить ${where}" aria-label="Добавить продукт ${where}" autocomplete="off" required>
+    <input class="field field--qty" name="qty" placeholder="сколько" aria-label="Сколько" autocomplete="off">
     <button class="icon-btn${slim ? " icon-btn--sm" : ""}" type="submit" aria-label="Добавить продукт ${where}">
       ${raw(icon("i-plus", { size: slim ? 18 : 22, stroke: "#1c3327" }))}
     </button>
@@ -146,13 +194,9 @@ function phone(state) {
     </button>`;
   }).join("");
 
-  const heading = [
-    filter === "all" ? "всё" : filter === "burning" ? "горит" : "кончается",
-    zoneFilter ?? "по сроку",
-  ].join(" · ");
-
   const rows = shown.length
-    ? shown.map((i) => stockRow(i, now)).join("")
+    ? groups(state).map((g) => html`${raw(g.name ? `<div class="aisle">${esc(g.name)} <span class="num">${g.entries.length}</span></div>` : "")}
+        ${raw(g.entries.map((i) => stockRow(i, now)).join(""))}`).join("")
     : html`<div class="empty">
         <h2>Здесь пусто</h2>
         <p>По этому фильтру ничего нет — редкий случай, когда пустой экран означает, что всё в порядке.</p>
@@ -169,7 +213,7 @@ function phone(state) {
 
     <div class="body">
       <div class="zones">${raw(zoneCards)}</div>
-      <div class="aisle">${heading}</div>
+      <div class="groupbar">${raw(groupSwitch())}</div>
       ${raw(rows)}
       <!-- Under the shelf, not above it: on a phone the job is looking at what
            is there, and a field for typing things in would push the first rows
@@ -201,13 +245,7 @@ function desk(state) {
   const focused = shown[cursor] ?? null;
   const marked = shown.filter((i) => selected.has(i.id));
 
-  const zoneChips = ZONES.map((zone) => {
-    const n = items.filter((i) => i.zone === zone).length;
-    return `<button class="chip" type="button" data-act="zone" data-zone="${esc(zone)}" aria-pressed="${zoneFilter === zone}">${esc(zone)} ${n}</button>`;
-  }).join("");
-
-  const rows = shown.map((entry, index) => {
-    const f = M.freshness(entry, now);
+  const row = (entry, index) => {
     const burns = M.isBurning(entry, now);
     const receipt = state.receipts.find((r) => (r.lines ?? []).some((l) => lineMatchesProduct(l, entry.product)));
     const on = selected.has(entry.id);
@@ -225,6 +263,16 @@ function desk(state) {
       <span class="tdim">${raw(receipt?.store ? esc(receipt.store) : none())}</span>
       <span class="tprice num">${raw(entry.price ? esc(fmtMoney(entry.price)) : none())}</span>
     </div>`;
+  };
+
+  // The running index is the one the cursor and the keyboard use, so it counts
+  // across group headings rather than restarting inside each one.
+  let index = -1;
+  const rows = groups(state).map((g) => {
+    const head = g.name
+      ? `<div class="trow trow--group" role="row"><span role="rowheader">${esc(g.name)}</span><span class="tdim num">${g.entries.length}</span></div>`
+      : "";
+    return head + g.entries.map((entry) => row(entry, (index += 1))).join("");
   }).join("");
 
   return html`<main class="screen">
@@ -248,8 +296,8 @@ function desk(state) {
     <div class="toolbar">
       ${raw(addbar(true, true))}
       <span class="toolbar-sep" aria-hidden="true"></span>
+      ${raw(groupSwitch())}
       ${raw(filterChips())}
-      <div class="chips">${raw(zoneChips)}</div>
       <span class="toolbar-gap"></span>
       ${raw(marked.length
         ? `<span class="toolbar-bulk">Выделено ${marked.length} · <button class="linkbtn" type="button" data-act="bulkUsed">списать</button> · <button class="linkbtn" type="button" data-act="bulkToList">в список</button></span>`
@@ -369,8 +417,16 @@ export default {
   },
 
   actions: {
+    grouping(el) {
+      grouping = el.dataset.grouping;
+      cursor = 0;
+      touch();
+    },
+
     add(form, state) {
-      const product = String(new FormData(form).get("product") ?? "").trim();
+      const data = new FormData(form);
+      const product = String(data.get("product") ?? "").trim();
+      const qty = String(data.get("qty") ?? "").trim();
       if (!product) return;
 
       const twice = alive(state).some((i) => i.product.toLowerCase() === product.toLowerCase());
@@ -381,7 +437,7 @@ export default {
         // zone and shelf life out of the reference table, bought today. Adding by
         // hand is the same product arriving by a different door, not a second
         // kind of stock item.
-        added = toStockItem({ product, zone: zoneFilter ?? undefined }, {
+        added = toStockItem({ product, qty, zone: zoneFilter ?? undefined }, {
           shelf: s.shelf,
           boughtAt: M.today(),
           id: uid("s"),
@@ -395,7 +451,7 @@ export default {
         : "срок неизвестен";
       toast(twice
         ? `«${product}» уже был на складе — теперь две записи`
-        : `${product} · ${added?.zone} · ${life}`);
+        : [product, qty, added?.zone, life].filter(Boolean).join(" · "));
 
       // commit() re-renders, so this form node is detached: re-query the live one
       // or every addition after the first loses the caret.

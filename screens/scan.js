@@ -6,6 +6,7 @@ import { commit, uid, touch, get } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import * as R from "../lib/receipt.js";
 import * as gh from "../lib/github.js";
+import { mark } from "../lib/sync.js";
 
 let stage = "camera";
 let stopCamera = null;
@@ -383,9 +384,10 @@ function finishReceipt() {
       for (const entry of s.list) {
         if (entry.deleted || entry.done) continue;
         if (entry.product.toLowerCase() === key.toLowerCase()) {
-          entry.done = true;
-          entry.takenBy = "me";
-          entry.at = Date.now();
+          const me = gh.identity();
+          mark(entry, "done", true);
+          entry.takenBy = me.id;
+          entry.takenName = me.name || null;
           listRemoved += 1;
         }
       }

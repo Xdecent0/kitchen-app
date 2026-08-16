@@ -124,8 +124,12 @@ button {
   min-height: 0;
 }
 
+/* Installed to the home screen with viewport-fit=cover, the page owns the whole
+   display — clock and notch included. The inset belongs on .head and not on
+   .app: .head--dark paints its own ground, and padding on the shell would show
+   a cream strip above it. On desktop the inset is 0 and nothing moves. */
 .head {
-  padding: 16px var(--pad) 14px;
+  padding: calc(16px + env(safe-area-inset-top)) var(--pad) 14px;
   border-bottom: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -299,6 +303,36 @@ button {
 }
 
 /* ---------- notice ---------- */
+
+/* The one message that outranks the screen under it: written state is being
+   lost right now. It sits above the stage in both layouts and does not fade. */
+.work {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px var(--pad);
+  background: var(--alarm-bg);
+  color: var(--alarm-ink);
+  font-size: var(--t-meta);
+  border-bottom: 1px solid rgba(193, 72, 31, 0.25);
+}
+
+.alert[hidden] {
+  display: none;
+}
+
+.alert-text {
+  flex: 1;
+  min-width: 0;
+}
 
 .notice {
   padding: 11px var(--pad);
@@ -2487,10 +2521,64 @@ kbd {
   overflow-y: auto;
 }
 
+/* Narrow desktop used to hide the feeder outright, which left a whole band of
+   window widths with no suggestions at all. It gets narrower, not absent. */
 @media (max-width: 1200px) {
   .feedwrap {
-    display: none;
+    width: 208px;
   }
+}
+
+/* The same suggestions on a phone. They sit at the top of the list rather than
+   in a column of their own, and collapse to one line once there is a list —
+   in the shop the list is the screen and everything else is in the way. */
+.suggest {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.suggest-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px var(--pad);
+  min-height: var(--tap);
+  text-align: left;
+}
+
+.suggest-title {
+  font-size: var(--t-body);
+  font-weight: 600;
+}
+
+.suggest-hint {
+  margin-left: auto;
+  font-size: var(--t-meta);
+  color: var(--ink-4);
+}
+
+.suggest[data-open] .feed-group:last-child {
+  border-bottom: 0;
+}
+
+/* A whole-width tap target, so the invitation behaves like the link it is. */
+.notice--link {
+  display: block;
+  color: var(--ink-3);
+  text-decoration: none;
+  min-height: var(--tap);
+}
+
+.notice--link:hover,
+.notice--link:focus-visible {
+  background: var(--surface-2, var(--surface));
+  color: var(--ink);
+}
+
+.empty--tight {
+  padding: 18px var(--pad);
+  text-align: left;
 }
 
 .feed-group {

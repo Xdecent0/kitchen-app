@@ -6,6 +6,7 @@ import { html, raw, icon, esc, cap, fmtMoney, fmtDate, toast, wide } from "../li
 import { touch, commit, uid } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import { rank, lineMatchesProduct } from "../lib/recipes.js";
+import * as T from "../lib/trip.js";
 
 export const ZONES = ["холодильник", "морозилка", "полка", "овощи"];
 
@@ -63,7 +64,12 @@ export function stockRow(itemEntry, now = M.today()) {
   </a>`;
 }
 
-function emptyScreen() {
+function emptyScreen(state) {
+  // Both links into the audit used to sit behind this screen, so an empty shelf
+  // meant no way in at all — even when the purchase rhythm had a week of
+  // questions waiting. An empty shelf is exactly when those questions matter.
+  const pending = state ? T.auditCandidates(state).length : 0;
+
   return html`<main class="screen">
     <header class="head head--dark"><h1>Склад</h1><span class="head-sub">пусто</span></header>
     <div class="body">
@@ -71,6 +77,10 @@ function emptyScreen() {
         <h2>О запасах ничего не знаю</h2>
         <p>Склад заполняется сам из чеков: отсканируй QR в подвале чека, и позиции со сроками появятся здесь.</p>
         <a class="btn" href="#scan">Сканировать чек</a>
+        ${raw(pending
+          ? `<p class="prose prose--muted">А ещё по ритму покупок накопилось ${pending} ${M.plural(pending, "вопрос", "вопроса", "вопросов")} — ревизия ответит на них за двадцать секунд.</p>
+             <a class="btn btn--ghost" href="#audit">Пройти ревизию</a>`
+          : "")}
       </div>
     </div>
   </main>`;
@@ -286,7 +296,7 @@ export default {
   title: () => "Склад",
 
   render(state) {
-    if (!alive(state).length) return emptyScreen();
+    if (!alive(state).length) return emptyScreen(state);
     return wide.matches ? desk(state) : phone(state);
   },
 

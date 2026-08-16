@@ -68,6 +68,10 @@ function connectForm(cfg, { compact = false } = {}) {
       <span class="fieldset-label">Ветка</span>
       <input class="field field--qty" name="branch" value="${cfg.branch ?? "main"}" autocomplete="off" spellcheck="false">
     </label>
+    <label class="fieldset">
+      <span class="fieldset-label">Как тебя зовут</span>
+      <input class="field" name="meName" value="${gh.identity().name}" placeholder="чтобы второй видел, кто взял" autocomplete="off">
+    </label>
     <button class="btn" type="submit" ${raw(checking ? "disabled" : "")}>${checking ? "Проверяю…" : cfg.token ? "Проверить снова" : "Подключить"}</button>
   </form>`;
 }
@@ -167,11 +171,14 @@ function phone(state) {
 
       <section class="pane pane--alarm">
         <div class="label">Опасная зона</div>
-        <p class="prose prose--alarm">Сброс стирает всё, что накопилось в этом браузере. Если репозиторий подключён, данные вернутся при следующей синхронизации; если нет, исчезнут насовсем.</p>
+        <p class="prose prose--alarm">Сброс стирает всё, что накопилось в этом браузере. Если репозиторий подключён, данные вернутся при следующей синхронизации; если нет, исчезнут насовсем. Ключ доступа сбросом не затрагивается — его отцепляют отдельно.</p>
         <div class="rowbtns">
           <button class="btn btn--ghost" type="button" data-act="loadDemo">Загрузить демо-данные</button>
           <button class="btn btn--ghost btn--danger" type="button" data-act="wipe">Стереть всё</button>
         </div>
+        ${raw(gh.isConfigured()
+          ? `<button class="btn btn--ghost btn--danger" type="button" data-act="forgetKey">Забыть ключ доступа</button>`
+          : "")}
       </section>
     </div>
   </main>`;
@@ -269,6 +276,10 @@ function sectionBody(state) {
       <div class="rowbtns">
         <button class="btn btn--ghost" type="button" data-act="loadDemo">Загрузить демо-данные</button>
         <button class="btn btn--ghost btn--danger" type="button" data-act="wipe">Стереть всё</button>
+      </div>
+      <p class="prose">Ключ доступа сбросом не затрагивается: он лежит отдельно и переживает «Стереть всё». Отцепить его — значит лишить этот браузер права писать в репозиторий; сами данные там останутся.</p>
+      <div class="rowbtns">
+        <button class="btn btn--ghost btn--danger" type="button" data-act="forgetKey" ${raw(gh.isConfigured() ? "" : "disabled")}>Забыть ключ доступа</button>
       </div>
     </div>`;
   }
@@ -546,6 +557,10 @@ export default {
       const branch = String(data.get("branch") ?? "main").trim() || "main";
       const token = rawToken.startsWith("•") ? gh.config().token : rawToken;
 
+      // Device-local, deliberately: two people sharing one repository are two
+      // people, and the name is what the other one sees next to a ticked row.
+      gh.setName(String(data.get("meName") ?? ""));
+
       if (!repo || !token) {
         checkResult = { ok: false, text: "Нужны и репозиторий, и ключ доступа." };
         return touch();
@@ -675,7 +690,25 @@ export default {
       if (!confirm("Стереть весь локальный склад, список и историю?")) return;
       resetStore();
       replace({ ...structuredClone(EMPTY_STATE), demo: false }, "wipe");
-      toast("Стёрто");
+      log.warn("настройки", "локальные данные стёрты вручную");
+      toast(gh.isConfigured() ? "Стёрто · ключ доступа остался" : "Стёрто");
+    },
+
+    /**
+     * "Стереть всё" cleared the data and left the key. A token with write access
+     * to a private repository outliving the data it was for is the one thing in
+     * here worth handling separately — so it gets its own button and its own
+     * confirmation, and says out loud that nothing in the repository is touched.
+     */
+    forgetKey() {
+      if (!gh.isConfigured()) return toast("Ключа и так нет");
+      if (!confirm("Отцепить ключ доступа от этого браузера? Данные в репозитории останутся на месте.")) return;
+
+      gh.clearConfig();
+      checkResult = null;
+      log.warn("настройки", "ключ доступа отцеплён");
+      touch();
+      toast("Ключ забыт · этот браузер больше не может писать в репозиторий");
     },
   },
 };

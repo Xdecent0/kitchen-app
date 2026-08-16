@@ -9,8 +9,9 @@ import assert from "node:assert/strict";
 import * as M from "../lib/model.js";
 import { sameProduct, findInStock, match, rank, stepDown, lineMatchesProduct } from "../lib/recipes.js";
 import { purchaseRhythm } from "../lib/model.js";
-import { mergeById, mergeHistory, dropTombstones } from "../lib/sync.js";
+import { mergeById, mergeHistory, mergeGone, dropTombstones } from "../lib/sync.js";
 import { unchanged } from "../lib/github.js";
+import { candidates } from "../lib/trip.js";
 import * as log from "../lib/log.js";
 import { parseTable, parseShelf, parseSynonyms, parseRecipe } from "../lib/vault.js";
 import { priceHistory, bestStore, trackingSummary, weekStart, staples } from "../lib/planning.js";
@@ -517,4 +518,132 @@ test("журнал отдаётся текстом для пересылки", (
 
   const text = log.asText();
   assert.match(text, /W \[синк\] круг · 4200 мс — квота 58/);
+});
+
+/* ---------- дубли склада ---------- */
+
+test("три пакета одного молока — одно предложение, а не три", () => {
+  // Строка чека заводит новую запись склада каждый раз, поиска существующей нет.
+  // Значит еженедельная покупка молока к месяцу даёт четыре записи, и список
+  // предлагал купить молоко четырежды подряд.
+  const state = {
+    list: [],
+    history: {},
+    confirmed: {},
+    menu: [],
+    recipes: [],
+    stock: [
+      { id: "a", product: "Молоко 2,5%", boughtAt: day(10), shelfDays: 10 },
+      { id: "b", product: "Молоко 2,5%", boughtAt: day(11), shelfDays: 10 },
+      { id: "c", product: "Молоко 2,5%", boughtAt: day(9), shelfDays: 10 },
+    ],
+  };
+
+  const c = candidates(state, T0);
+  assert.equal(c.burning.length, 1, "одна карточка на продукт");
+  assert.equal(c.burning[0].rows, 3, "но видно, что записей три");
+  assert.equal(c.burning[0].item.id, "b", "показывается та, что ближе всех к краю");
+});
+
+test("разные продукты не схлопываются", () => {
+  const state = {
+    list: [],
+    history: {},
+    confirmed: {},
+    menu: [],
+    recipes: [],
+    stock: [
+      { id: "a", product: "Молоко", boughtAt: day(9), shelfDays: 10 },
+      { id: "b", product: "Кефир", boughtAt: day(13), shelfDays: 14 },
+    ],
+  };
+
+  assert.equal(candidates(state, T0).burning.length, 2);
+});
+
+/* ---------- отмена против репозитория ---------- */
+
+test("«Вернуть» переживает круг синхронизации", () => {
+  // Раньше deleted был липким: remote всё ещё говорил «удалено», липкость
+  // означала «удалено побеждает всегда» — и дюжина строк, убранных одним тапом
+  // и возвращённых следующим, возвращалась удалённой. Навсегда.
+  const remote = [{ id: "l1", product: "Молоко", deleted: true, deletedAt: 1000, at: 1000 }];
+  const mine = [{ id: "l1", product: "Молоко", deleted: false, deletedAt: 2000, at: 2000 }];
+
+  const merged = mergeById(mine, remote);
+  assert.equal(merged[0].deleted, false, "последнее слово за отменой");
+});
+
+test("правка количества не снимает чужую галочку", () => {
+  // Ради чего липкость и вводилась: он отмечает «взял» в полдень, я в час меняю
+  // количество, и запись целиком выигрывает мою — вместе с отсутствующей галкой.
+  const his = [{ id: "l1", product: "Молоко", done: true, doneAt: 1200, at: 1200 }];
+  const myEdit = [{ id: "l1", product: "Молоко", qty: "2 л", done: false, at: 1300 }];
+
+  const merged = mergeById(myEdit, his);
+  assert.equal(merged[0].done, true, "правка без касания галочки не голосует");
+  assert.equal(merged[0].qty, "2 л", "но сама правка доезжает");
+});
+
+test("снятая вручную галочка побеждает старую отметку", () => {
+  const stale = [{ id: "l1", done: true, doneAt: 1000, at: 1000 }];
+  const untick = [{ id: "l1", done: false, doneAt: 3000, at: 3000 }];
+
+  assert.equal(mergeById(untick, stale)[0].done, false);
+  assert.equal(mergeById(stale, untick)[0].done, false, "порядок аргументов не решает");
+});
+
+test("старые записи без меток времени продолжают работать", () => {
+  // Всё, что уже лежит в репозитории, метки не имеет — для них решает entry.at.
+  const legacy = [{ id: "l1", done: true, at: 500 }];
+  const fresh = [{ id: "l1", done: false, at: 100 }];
+
+  assert.equal(mergeById(legacy, fresh)[0].done, true);
+});
+
+test("имя того, кто взял, едет вместе с галочкой, а не с записью", () => {
+  const hers = [{ id: "l1", done: true, doneAt: 1200, at: 1200, takenBy: "me_anna", takenName: "Аня" }];
+  const myEdit = [{ id: "l1", qty: "2 л", done: false, at: 1300 }];
+
+  const merged = mergeById(myEdit, hers);
+  assert.equal(merged[0].takenName, "Аня", "правка количества не переписывает автора отметки");
+});
+
+test("надгробие считается от момента удаления, а не последнего касания", () => {
+  const now = Date.UTC(2026, 7, 15);
+  const old = now - 400 * DAY;
+  const entries = [
+    { id: "a", deleted: true, deletedAt: old, at: now },
+    { id: "b", deleted: true, deletedAt: now - 10 * DAY, at: now },
+  ];
+
+  assert.deepEqual(dropTombstones(entries, 365, now).map((e) => e.id), ["b"]);
+});
+
+/* ---------- история покупок ---------- */
+
+test("снятая отметка не возвращается из репозитория", () => {
+  // Чистое объединение множеств не умеет забывать: дата уезжала в репозиторий,
+  // снятие вычитало её только локально, и следующий синк возвращал её обратно.
+  const mine = { Молоко: [day(9), day(3)] };
+  const theirs = { Молоко: [day(9), day(6), day(3)] };
+  const gone = { Молоко: [day(6)] };
+
+  assert.deepEqual(mergeHistory(mine, theirs, gone).Молоко, [day(9), day(3)].sort((a, b) => a - b));
+});
+
+test("объединение без снятого остаётся объединением", () => {
+  const merged = mergeHistory({ Хлеб: [day(4)] }, { Хлеб: [day(7)] });
+  assert.deepEqual(merged.Хлеб, [day(7), day(4)].sort((a, b) => a - b));
+});
+
+test("продукт исчезает из истории, когда снято всё", () => {
+  const merged = mergeHistory({ Морс: [day(2)] }, { Морс: [day(2)] }, { Морс: [day(2)] });
+  assert.ok(!("Морс" in merged), "пустой хвост не остаётся ключом");
+});
+
+test("снятое подрезается по возрасту, как любое надгробие", () => {
+  const now = Date.UTC(2026, 7, 15);
+  const merged = mergeGone({ Молоко: [now - 400 * DAY, now - 10 * DAY] }, {}, 365, now);
+  assert.deepEqual(merged.Молоко, [now - 10 * DAY]);
 });

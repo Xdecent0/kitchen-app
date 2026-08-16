@@ -8,6 +8,7 @@
 import { html, raw, icon, esc, toast, fmtDate, fmtMoney, wide } from "../lib/dom.js";
 import { commit, uid, touch } from "../lib/state.js";
 import * as M from "../lib/model.js";
+import { mark } from "../lib/sync.js";
 import * as P from "../lib/planning.js";
 import { match, rank } from "../lib/recipes.js";
 import { alive } from "./stock.js";
@@ -384,8 +385,7 @@ export default {
       commit("menu.clear", (s) => {
         const entry = s.menu.find((m) => m.id === el.dataset.id);
         if (!entry) return null;
-        entry.deleted = true;
-        entry.at = Date.now();
+        mark(entry, "deleted", true);
         return { kind: "menu", id: entry.id };
       });
       picking = null;
@@ -399,10 +399,7 @@ export default {
 
       commit("menu.clearWeek", (s) => {
         for (const entry of s.menu) {
-          if (ids.includes(entry.id)) {
-            entry.deleted = true;
-            entry.at = Date.now();
-          }
+          if (ids.includes(entry.id)) mark(entry, "deleted", true);
         }
         return { kind: "menu", bulk: true };
       });
@@ -411,10 +408,7 @@ export default {
         undo() {
           commit("menu.clearWeek.undo", (s) => {
             for (const entry of s.menu) {
-              if (ids.includes(entry.id)) {
-                entry.deleted = false;
-                entry.at = Date.now();
-              }
+              if (ids.includes(entry.id)) mark(entry, "deleted", false);
             }
             return { kind: "menu", bulk: true };
           });

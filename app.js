@@ -2,7 +2,7 @@
 // screen, keeps the nav honest, and funnels every click to the right handler.
 
 import { $, html, raw, icon, toast, wide, setCurrency } from "./lib/dom.js";
-import { get, subscribe, guardUnload } from "./lib/state.js";
+import { get, subscribe, guardUnload, whenSaveFails } from "./lib/state.js";
 import * as log from "./lib/log.js";
 import { demoState, isFresh, stripDemo } from "./lib/store.js";
 import { replace } from "./lib/state.js";
@@ -56,6 +56,34 @@ let current = { name: "list", arg: null };
    that can throw — including the demo seed below. */
 log.captureGlobals();
 guardUnload();
+
+/**
+ * Persistence stopped working. Until now this was reported to nobody: the hook
+ * existed and nothing was hung on it, so the app kept accepting edits it could
+ * no longer keep, while the status line cheerfully counted a queue that would
+ * not survive the tab. The one thing that can still save the data is a sync, so
+ * the banner offers exactly that.
+ */
+whenSaveFails((ok, state) => {
+  const el = $("[data-alert]");
+  if (!el) return;
+
+  if (ok) {
+    el.hidden = true;
+    el.innerHTML = "";
+    log.info("хранилище", "запись снова работает");
+    return;
+  }
+
+  const configured = gh.isConfigured();
+  el.hidden = false;
+  el.innerHTML = html`<span class="alert-text">Не удаётся сохранить: место в браузере кончилось. Всё, что ты меняешь сейчас, живёт только до закрытия вкладки.</span>
+    ${raw(configured
+      ? `<button class="btn btn--sm" type="button" data-act="rescue">Отправить в репозиторий</button>`
+      : `<a class="btn btn--sm" href="#settings">Подключить репозиторий</a>`)}`;
+
+  log.fail("хранилище", "данные только в памяти", { очередь: state.queue.length, подключено: configured });
+});
 log.info("приложение", "запуск", { экран: location.hash || "#list", офлайн: !navigator.onLine });
 
 /* First run has nothing to judge the interface by, so seed the demo once —
@@ -303,6 +331,9 @@ const GLOBAL_ACTIONS = {
   back: () => history.back(),
   go: (el) => go(el.dataset.to),
   sync: () => runSync(),
+  /* Nothing can be written locally, so the repository is the only place the
+     edits can still go. Not a normal sync button: this one is the exit. */
+  rescue: () => runSync(),
   rail: () => {
     const mini = localStorage.getItem(NAV_KEY) !== "1";
     localStorage.setItem(NAV_KEY, mini ? "1" : "0");

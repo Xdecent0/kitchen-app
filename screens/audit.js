@@ -4,6 +4,7 @@
 import { html, raw, icon, esc, toast } from "../lib/dom.js";
 import { commit, uid, touch, get } from "../lib/state.js";
 import * as M from "../lib/model.js";
+import { auditCandidates } from "../lib/trip.js";
 import { ZONE_ICON } from "./stock.js";
 
 let cursor = 0;
@@ -14,36 +15,18 @@ let candidates = null;
  * Two kinds of doubt: stock the app believes is past its shelf life, and products
  * the purchase rhythm says should have run out. Both need a human yes or no.
  */
-function buildCandidates(state) {
-  const now = M.today();
-  const seen = new Set();
-  const out = [];
-
-  for (const entry of state.stock) {
-    if (entry.deleted || entry.empty) continue;
-    const { left } = M.freshness(entry, now);
-    if (left != null && left <= 0) {
-      out.push({ kind: "stock", id: entry.id, product: entry.product, item: entry });
-      seen.add(entry.product.toLowerCase());
-    }
-  }
-
-  for (const product of Object.keys(state.history)) {
-    if (seen.has(product.toLowerCase())) continue;
-    if (!M.isDue(product, state.history, now, state.confirmed)) continue;
-    const inStock = state.stock.find((i) => !i.deleted && !i.empty && i.product.toLowerCase().includes(product.toLowerCase()));
-    out.push({ kind: "rhythm", id: uid("a"), product, item: inStock ?? null });
-  }
-
-  return out;
-}
+const buildCandidates = (state) => auditCandidates(state, M.today());
 
 function card(entry, state, index, total) {
   const now = M.today();
   const glyph = ZONE_ICON[entry.item?.zone] ?? "i-shelf";
 
+  const rows = entry.items?.length ?? (entry.item ? 1 : 0);
   const note = entry.kind === "stock"
-    ? `${entry.item.qty || entry.item.level || ""} · срок вышел ${M.expiryLabel(entry.item, now)}`.trim()
+    ? [
+        rows > 1 ? `${rows} ${M.plural(rows, "запись", "записи", "записей")}` : entry.item.qty || entry.item.level || "",
+        `срок вышел ${M.expiryLabel(entry.item, now)}`,
+      ].filter(Boolean).join(" · ")
     : M.dueReason(entry.product, state.history, now);
 
   return html`<div class="audit-card">
@@ -173,14 +156,18 @@ function apply() {
 
   commit("audit.apply", (s) => {
     for (const entry of decided) {
-      const stockEntry = entry.item ? s.stock.find((i) => i.id === entry.item.id) : null;
+      // One card can stand for several identical rows; the answer applies to all
+      // of them, or the duplicates it just hid come back next week.
+      const ids = new Set((entry.items ?? (entry.item ? [entry.item] : [])).map((i) => i.id));
+      const rows = s.stock.filter((i) => ids.has(i.id));
+      const stockEntry = rows[0] ?? null;
 
       if (entry.verdict === "gone") {
-        if (stockEntry) {
-          stockEntry.empty = true;
-          stockEntry.outcome = "used";
-          stockEntry.closedAt = now;
-          stockEntry.at = Date.now();
+        for (const row of rows) {
+          row.empty = true;
+          row.outcome = "used";
+          row.closedAt = now;
+          row.at = Date.now();
         }
 
         const already = s.list.some((l) => !l.deleted && !l.done && l.product.toLowerCase() === entry.product.toLowerCase());
@@ -194,15 +181,23 @@ function apply() {
         s.confirmed[entry.product] = now;
 
         if (!stockEntry) continue;
-        const lived = stockEntry.boughtAt ? M.daysBetween(stockEntry.boughtAt, now) : null;
+
+        // The oldest row is the one that proves the shelf life was understated:
+        // it is the one that has actually lasted this long.
+        const oldest = rows.reduce((a, b) => ((a.boughtAt ?? Infinity) <= (b.boughtAt ?? Infinity) ? a : b), stockEntry);
+        const lived = oldest.boughtAt ? M.daysBetween(oldest.boughtAt, now) : null;
+
         // Longest match wins: "сыр" would otherwise stretch the shelf life of
         // "сырок глазированный" and vice versa.
         const ref = s.shelf
-          .filter((e) => stockEntry.product.toLowerCase().includes(e.product))
+          .filter((e) => oldest.product.toLowerCase().includes(e.product))
           .sort((a, b) => b.product.length - a.product.length)[0];
         if (ref && lived && lived > ref.closed) ref.closed = lived;
-        if (lived) stockEntry.shelfDays = Math.max(stockEntry.shelfDays ?? 0, lived + 2);
-        stockEntry.at = Date.now();
+
+        for (const row of rows) {
+          if (lived) row.shelfDays = Math.max(row.shelfDays ?? 0, lived + 2);
+          row.at = Date.now();
+        }
       }
     }
 

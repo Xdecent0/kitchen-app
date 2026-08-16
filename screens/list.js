@@ -13,6 +13,8 @@ import * as M from "../lib/model.js";
 import * as T from "../lib/trip.js";
 import { priceHistory } from "../lib/planning.js";
 import * as S from "../lib/share.js";
+import * as gh from "../lib/github.js";
+import { mark } from "../lib/sync.js";
 
 const alive = (state) => state.list.filter((e) => !e.deleted);
 
@@ -20,6 +22,8 @@ let cursor = -1;
 let selected = new Set();
 let sharing = false;
 let shareStyle = "checklist";
+/** null — решает сам список: пустой открывает предложения, непустой сворачивает. */
+let feedOpen = null;
 
 /* ---------- shared pieces ---------- */
 
@@ -29,9 +33,15 @@ function reasonOf(entry, state) {
   return "";
 }
 
-function whoOf(entry, state) {
-  if (!entry.takenBy || entry.takenBy === "me") return null;
-  return state.people.find((p) => p.id === entry.takenBy)?.name ?? entry.takenBy;
+/**
+ * Only ever names someone else. The name travels with the tick because the two
+ * devices have no shared roster to look each other up in — `people` is a local
+ * list of who you told this browser about, not an identity service.
+ */
+function whoOf(entry) {
+  if (!entry.takenBy) return null;
+  if (entry.takenBy === gh.identity().id) return null;
+  return entry.takenName || "кто-то ещё";
 }
 
 /* ---------- share ---------- */
@@ -77,7 +87,7 @@ function shareSheet(state) {
 
 function phoneRow(entry, state) {
   const why = reasonOf(entry, state);
-  const who = whoOf(entry, state);
+  const who = whoOf(entry);
 
   return html`<button class="row" type="button" data-act="toggle" data-id="${entry.id}"
       data-done="${entry.done ? 1 : 0}" aria-pressed="${entry.done}">
@@ -91,6 +101,64 @@ function phoneRow(entry, state) {
   </button>`;
 }
 
+/**
+ * The whole point of the app, finally on the device it was built for.
+ *
+ * The candidates and the two actions have existed since the first week; the only
+ * thing missing was a call from the phone layout, so the forecast ran every
+ * render and was shown to nobody. Open by default when the list is empty — that
+ * is the moment the suggestions *are* the screen — and collapsed once there is a
+ * list, because in the shop the list is the screen and everything else is noise.
+ */
+function phoneFeeder(state, listEmpty) {
+  const sources = T.candidates(state);
+  const total = T.candidateCount(sources);
+  if (!total) return "";
+
+  const open = feedOpen ?? listEmpty;
+
+  const head = html`<button class="suggest-head" type="button" data-act="feedPhone" aria-expanded="${open}">
+    <span class="suggest-title">Предлагаю</span>
+    <span class="feed-count">${total}</span>
+    <span class="suggest-hint">${open ? "свернуть" : "посмотреть"}</span>
+  </button>`;
+
+  if (!open) return html`<div class="suggest">${raw(head)}</div>`;
+
+  const blocks = SOURCES.filter((s) => sources[s.key].length).map((s) => {
+    const rows = sources[s.key].map((c) => html`<button class="feed-row" type="button" data-act="take"
+        data-product="${c.product}" data-qty="${c.qty ?? ""}" data-from="${s.key}">
+      <span class="feed-main">
+        <span class="feed-name">${c.product}</span>
+        <span class="feed-why" data-tone="${s.tone}">${c.reason}</span>
+      </span>
+      <span class="feed-plus" aria-hidden="true">${raw(icon("i-plus", { size: 16, stroke: "#5f7468" }))}</span>
+    </button>`).join("");
+
+    return html`<div class="feed-group">
+      <div class="feed-head">
+        <span>${s.title}</span>
+        <button class="linkbtn" type="button" data-act="takeAll" data-source="${s.key}">взять все · ${sources[s.key].length}</button>
+      </div>
+      ${raw(rows)}
+    </div>`;
+  }).join("");
+
+  return html`<div class="suggest" data-open="1">${raw(head)}${raw(blocks)}</div>`;
+}
+
+/** Twenty seconds that keep the forecast honest — and no way in when the shelf is empty. */
+function auditInvite(state) {
+  const now = M.today();
+  const since = state.lastAudit == null ? null : M.daysBetween(state.lastAudit, now);
+  if (since != null && since < 7) return "";
+  if (!T.auditCandidates(state, now).length) return "";
+
+  return html`<a class="notice notice--link" href="#audit">
+    ${since == null ? "Ревизии ещё не было" : `Ревизия была ${since} ${M.plural(since, "день", "дня", "дней")} назад`} — двадцать секунд, и прогноз снова знает, что у тебя есть
+  </a>`;
+}
+
 function phone(state) {
   const entries = alive(state);
   const pending = entries.filter((e) => !e.done);
@@ -98,12 +166,20 @@ function phone(state) {
   const share = entries.length ? done.length / entries.length : 0;
   const others = state.people.filter((p) => !p.self);
 
+  const suggested = T.candidateCount(T.candidates(state));
+
   const body = !entries.length
-    ? html`<div class="empty">
-        <h2>Список пуст</h2>
-        <p>Либо всё куплено, либо приложение ещё не знает твоих привычек. Отсканируй чек — по нему станет видно, что и как часто ты берёшь.</p>
-        <a class="btn" href="#scan">Сканировать чек</a>
-      </div>`
+    ? suggested
+      // Saying "список пуст, отсканируй чек" above a list of things the app
+      // already knows you need would be the app arguing with itself.
+      ? html`<div class="empty empty--tight">
+          <p class="prose prose--muted">Список пуст, но приложение уже знает, что тебе, скорее всего, нужно — выше. Нажми на строку, чтобы взять её в список.</p>
+        </div>`
+      : html`<div class="empty">
+          <h2>Список пуст</h2>
+          <p>Либо всё куплено, либо приложение ещё не знает твоих привычек. Отсканируй чек — по нему станет видно, что и как часто ты берёшь.</p>
+          <a class="btn" href="#scan">Сканировать чек</a>
+        </div>`
     : [
         ...M.groupByAisle(pending, state.aisles).flatMap((group) => [
           html`<div class="aisle">${group.name} · отдел ${group.order}</div>`,
@@ -127,6 +203,7 @@ function phone(state) {
     </header>
 
     ${raw(others.length ? `<div class="notice">${esc(others.map((p) => p.name).join(", "))} тоже видит этот список — отметки сливаются, ничего не теряется</div>` : "")}
+    ${raw(auditInvite(state))}
 
     <form class="addbar" data-act-submit="add">
       <input class="field" name="product" placeholder="Добавить продукт" aria-label="Добавить продукт" autocomplete="off" required>
@@ -134,7 +211,10 @@ function phone(state) {
       <button class="icon-btn" type="submit" aria-label="Добавить">${raw(icon("i-plus", { size: 22, stroke: "#1c3327" }))}</button>
     </form>
 
-    <div class="body">${raw(body)}</div>
+    <div class="body">
+      ${raw(phoneFeeder(state, !entries.length))}
+      ${raw(body)}
+    </div>
 
     <div class="foot">
       <a class="btn btn--grow" href="#scan">Сканировать чек</a>
@@ -197,7 +277,7 @@ function feeder(state) {
 function tripRow(row, state, index) {
   const { entry } = row;
   const why = reasonOf(entry, state);
-  const who = whoOf(entry, state);
+  const who = whoOf(entry);
   const on = selected.has(entry.id);
 
   return html`<div class="lrow" data-act="focus" data-id="${entry.id}" data-index="${index}"
@@ -348,6 +428,7 @@ export default {
     cursor = -1;
     selected.clear();
     sharing = false;
+    feedOpen = null;
   },
 
   keys(e, state) {
@@ -436,6 +517,13 @@ export default {
       toast(`${el.dataset.product} — в список`);
     },
 
+    /* Phone only. Once touched, the choice sticks for this visit — the automatic
+       rule stops guessing the moment the person has said what they want. */
+    feedPhone(_el, state) {
+      feedOpen = !(feedOpen ?? !alive(state).length);
+      touch();
+    },
+
     takeAll(el, state) {
       const sources = T.candidates(state);
       const list = sources[el.dataset.source] ?? [];
@@ -482,10 +570,7 @@ export default {
 
       commit("list.clearDone", (s) => {
         for (const entry of s.list) {
-          if (ids.includes(entry.id)) {
-            entry.deleted = true;
-            entry.at = Date.now();
-          }
+          if (ids.includes(entry.id)) mark(entry, "deleted", true);
         }
         return { kind: "list", bulk: true };
       });
@@ -494,10 +579,7 @@ export default {
         undo() {
           commit("list.clearDone.undo", (s) => {
             for (const entry of s.list) {
-              if (ids.includes(entry.id)) {
-                entry.deleted = false;
-                entry.at = Date.now();
-              }
+              if (ids.includes(entry.id)) mark(entry, "deleted", false);
             }
             return { kind: "list", bulk: true };
           });
@@ -508,6 +590,29 @@ export default {
 };
 
 /* ---------- mutations ---------- */
+
+/** A tick is a purchase. Recorded here so the forecast learns from unscanned trips too. */
+function markBought(s, product, day) {
+  const seen = s.history[product] ?? [];
+  s.history[product] = [...new Set([...seen, day])].sort((a, b) => a - b);
+  delete s.confirmed[product];
+
+  // No longer a removal, if it ever was.
+  if (s.gone?.[product]) {
+    s.gone[product] = s.gone[product].filter((d) => d !== day);
+    if (!s.gone[product].length) delete s.gone[product];
+  }
+}
+
+/** Unticking is a correction, and a correction has to travel or the repository undoes it. */
+function unmarkBought(s, product, day) {
+  const seen = s.history[product] ?? [];
+  s.history[product] = seen.filter((d) => d !== day);
+  if (!s.history[product].length) delete s.history[product];
+
+  s.gone = s.gone ?? {};
+  s.gone[product] = [...new Set([...(s.gone[product] ?? []), day])].sort((a, b) => a - b);
+}
 
 function addEntry(product, qty, from) {
   commit("list.add", (s) => {
@@ -523,22 +628,18 @@ function toggleEntry(id) {
   commit("list.toggle", (s) => {
     const entry = s.list.find((x) => x.id === id);
     if (!entry) return null;
-    entry.done = !entry.done;
-    entry.takenBy = entry.done ? "me" : null;
-    entry.at = Date.now();
+
+    mark(entry, "done", !entry.done);
+    const me = gh.identity();
+    entry.takenBy = entry.done ? me.id : null;
+    entry.takenName = entry.done ? me.name || null : null;
 
     // Not every receipt gets scanned, so the tick itself is evidence that the
     // product was bought today — without it the forecast only ever learns from
     // scans and keeps asking for what is already in the bag.
     const today = M.today();
-    const seen = s.history[entry.product] ?? [];
-    if (entry.done) {
-      s.history[entry.product] = [...new Set([...seen, today])].sort((a, b) => a - b);
-      delete s.confirmed[entry.product];
-    } else {
-      s.history[entry.product] = seen.filter((d) => d !== today);
-      if (!s.history[entry.product].length) delete s.history[entry.product];
-    }
+    if (entry.done) markBought(s, entry.product, today);
+    else unmarkBought(s, entry.product, today);
 
     return { kind: "list", id: entry.id };
   });
@@ -549,8 +650,7 @@ function removeEntry(id) {
   commit("list.remove", (s) => {
     const entry = s.list.find((x) => x.id === id);
     if (!entry) return null;
-    entry.deleted = true;
-    entry.at = Date.now();
+    mark(entry, "deleted", true);
     return { kind: "list", id: entry.id };
   });
 }

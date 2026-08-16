@@ -68,7 +68,15 @@
     </button>
   </nav>
 
-  <div class="stage" data-stage aria-live="polite"></div>
+  <!-- The alert is persistent, because a toast that has faded is
+       indistinguishable from a working app, and a full storage quota means
+       everything since the last write lives only until this tab closes.
+       It shares a column with the stage so the phone stacks it above the
+       screen and the desktop keeps it out of the sidebar. -->
+  <div class="work">
+    <div class="alert" data-alert role="alert" hidden></div>
+    <div class="stage" data-stage aria-live="polite"></div>
+  </div>
 </div>
 
 <script type="module" src="./app.js"></script>

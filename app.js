@@ -2,7 +2,8 @@
 // screen, keeps the nav honest, and funnels every click to the right handler.
 
 import { $, html, raw, icon, toast, wide, setCurrency } from "./lib/dom.js";
-import { get, subscribe } from "./lib/state.js";
+import { get, subscribe, guardUnload } from "./lib/state.js";
+import * as log from "./lib/log.js";
 import { demoState, isFresh, stripDemo } from "./lib/store.js";
 import { replace } from "./lib/state.js";
 import * as M from "./lib/model.js";
@@ -50,6 +51,12 @@ const NAV = [
 ];
 
 let current = { name: "list", arg: null };
+
+/* Nothing catches what happens before this line, so it runs before anything else
+   that can throw — including the demo seed below. */
+log.captureGlobals();
+guardUnload();
+log.info("приложение", "запуск", { экран: location.hash || "#list", офлайн: !navigator.onLine });
 
 /* First run has nothing to judge the interface by, so seed the demo once —
    keyed on "nothing was ever saved", not on "the arrays are empty". Keyed on
@@ -146,7 +153,27 @@ function render() {
   const sameScreen = previous === current.name && previousArg === current.arg;
   const keep = sameScreen ? [...stage.querySelectorAll(".body, .table, .feed, .inspector")].map((el) => el.scrollTop) : null;
 
-  stage.innerHTML = screen.render(state, current.arg);
+  // Every tap rebuilds the screen from scratch. That is fine at fifty items and
+  // not fine at five hundred, and the difference is invisible until someone is
+  // standing in a queue — so the slow ones say so in the journal.
+  const stop = log.time("отрисовка", current.name, { warnAfter: 60 });
+
+  try {
+    stage.innerHTML = screen.render(state, current.arg);
+  } catch (err) {
+    // A screen that throws used to leave a blank app with no way back.
+    log.fail("отрисовка", `${current.name} не собрался`, err?.stack?.slice(0, 240) ?? err?.message);
+    stage.innerHTML = html`<div class="pane pane--alarm">
+      <h2 class="pane-title">Экран не собрался</h2>
+      <p class="pane-note">${err?.message ?? "неизвестная ошибка"}</p>
+      <p class="pane-note">Данные целы. Запись есть в журнале: Настройки → Журнал.</p>
+      <a class="btn btn--ghost btn--sm" href="#list">К списку</a>
+    </div>`;
+    stop({ ошибка: true });
+    previous = current.name;
+    previousArg = current.arg;
+    return;
+  }
 
   if (keep) {
     [...stage.querySelectorAll(".body, .table, .feed, .inspector")].forEach((el, i) => {
@@ -154,7 +181,13 @@ function render() {
     });
   }
 
-  screen.mount?.(stage, state, current.arg);
+  try {
+    screen.mount?.(stage, state, current.arg);
+  } catch (err) {
+    log.fail("отрисовка", `${current.name}: mount упал`, err?.message);
+  }
+
+  stop({ строк: stage.querySelectorAll(".row, .trow, .card").length });
   previous = current.name;
   previousArg = current.arg;
 
@@ -242,7 +275,12 @@ export async function runSync() {
   renderSyncStatus();
   try {
     const report = await sync();
-    toast(`Синхронизировано · ${report.collections.length} разделов`);
+    // "Синхронизировано · 8 разделов" was said even when all eight were identical.
+    toast(
+      report.pushed === 0
+        ? "Всё уже совпадает — писать было нечего"
+        : `Отправлено ${report.pushed} ${report.pushed === 1 ? "раздел" : "разделов"}${report.skipped ? ` · ${report.skipped} без изменений` : ""}`
+    );
   } catch (err) {
     toast(`Синхронизация не прошла: ${err.message}`, "alarm");
   } finally {

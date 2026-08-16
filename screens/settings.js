@@ -8,7 +8,9 @@
 
 import { html, raw, icon, esc, toast, wide, fmtDate } from "../lib/dom.js";
 import { commit, uid, touch, get, replace } from "../lib/state.js";
-import { demoState, reset as resetStore, EMPTY_STATE } from "../lib/store.js";
+import { demoState, reset as resetStore, EMPTY_STATE, size as stateSize } from "../lib/store.js";
+import * as log from "../lib/log.js";
+import { copy as copyText } from "../lib/share.js";
 import * as M from "../lib/model.js";
 import * as gh from "../lib/github.js";
 import { sync, pullReferences, pullRecipes } from "../lib/sync.js";
@@ -27,8 +29,16 @@ const SECTIONS = [
   { key: "synonyms", name: "Синонимы" },
   { key: "aisles", name: "Отделы" },
   { key: "rules", name: "Выучено из чеков" },
+  { key: "log", name: "Журнал" },
   { key: "danger", name: "Опасная зона", apart: true },
 ];
+
+/** Human sizes: "812 Б" is noise, "0.8 МБ" is a decision. */
+function bytes(n) {
+  if (n < 1024) return `${n} Б`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} КБ`;
+  return `${(n / 1024 / 1024).toFixed(1)} МБ`;
+}
 
 function countOf(key, state) {
   if (key === "sync") return state.queue.length;
@@ -37,6 +47,8 @@ function countOf(key, state) {
   if (key === "synonyms") return state.synonyms.length;
   if (key === "aisles") return state.aisles.length;
   if (key === "rules") return Object.keys(state.rules).length;
+  // The count that matters in a journal is the number of things that went wrong.
+  if (key === "log") return log.counts().fail + log.counts().warn;
   return null;
 }
 
@@ -66,6 +78,31 @@ function demoWarning(state) {
     <div class="label">Сейчас загружены демо-данные</div>
     <p class="prose prose--alarm">Восемь позиций склада, шесть строк списка и три выдуманных чека — они нужны, чтобы приложение было на что посмотреть до первой закупки. Синхронизация с ними заблокирована: иначе выдуманный склад уедет в репозиторий и смешается с настоящим.</p>
     <button class="btn" type="button" data-act="startClean">Очистить и начать с нуля</button>
+  </section>`;
+}
+
+/**
+ * The phone is where the failures actually happen — in a shop, on one bar of
+ * signal — and it is the one device with no way to open devtools. So the trouble
+ * comes to the surface here, and the whole journal is one tap from a message.
+ */
+function journalPane(state) {
+  const c = log.counts();
+  const trouble = log.entries({ limit: 200 }).filter((e) => e.l !== "i").slice(-5).reverse();
+
+  return html`<section class="pane">
+    <div class="head-row">
+      <div class="label">Журнал</div>
+      <span class="head-sub num">${bytes(stateSize())} данных</span>
+    </div>
+    ${raw(trouble.length
+      ? `<p class="prose">${c.fail ? `Сбоев: ${c.fail}. ` : ""}${c.warn ? `Предупреждений: ${c.warn}.` : ""} Последнее:</p>
+         ${trouble.map((e) => `<div class="insp-row" data-level="${esc(e.l)}"><span>${esc(e.m)}</span><span class="tdim num">${esc(new Date(e.t).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" }))}</span></div>`).join("")}`
+      : `<p class="prose prose--muted">За ${c.all} ${M.plural(c.all, "записанное событие", "записанных события", "записанных событий")} ничего не сломалось.</p>`)}
+    <div class="rowbtns">
+      <button class="btn btn--ghost btn--grow" type="button" data-act="copyLog">Скопировать журнал</button>
+      <button class="btn btn--ghost" type="button" data-act="clearLog">Очистить</button>
+    </div>
   </section>`;
 }
 
@@ -126,6 +163,8 @@ function phone(state) {
         </div>
       </section>
 
+      ${raw(journalPane(state))}
+
       <section class="pane pane--alarm">
         <div class="label">Опасная зона</div>
         <p class="prose prose--alarm">Сброс стирает всё, что накопилось в этом браузере. Если репозиторий подключён, данные вернутся при следующей синхронизации; если нет, исчезнут насовсем.</p>
@@ -179,6 +218,23 @@ function rows(state) {
   if (section === "people") {
     return state.people.map((p) => ({ id: p.id, cells: [p.name, p.self ? "это я" : "коллаборатор"], detail: p }));
   }
+  if (section === "log") {
+    // Newest first: a journal is read from the thing that just happened backwards.
+    return log
+      .entries({ limit: 200 })
+      .slice()
+      .reverse()
+      .map((e, i) => ({
+        id: `log-${i}`,
+        cells: [
+          new Date(e.t).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          e.s,
+          e.m,
+        ],
+        tone: e.l,
+        detail: e,
+      }));
+  }
   return [];
 }
 
@@ -189,6 +245,7 @@ const HEADS = {
   rules: ["строка чека", "продукт"],
   sync: ["что", "метка", "когда"],
   people: ["имя", "роль"],
+  log: ["время", "источник", "что произошло"],
 };
 
 function sectionBody(state) {
@@ -227,6 +284,7 @@ function sectionBody(state) {
       shelf: "Справочник сроков пуст. Подтяни его из волта кнопкой «Обновить справочники».",
       synonyms: "Словарь масок пуст. Подтяни его из волта.",
       aisles: "Порядок отделов не задан. Подтяни его из волта.",
+      log: "Журнал пуст — приложение ещё ничего не записало в этом браузере.",
     }[section];
 
     return html`<div class="setpane"><p class="prose">${empty}</p>
@@ -240,7 +298,7 @@ function sectionBody(state) {
     <div class="trow trow--head" role="row" style="${cols}">
       ${raw(head.map((h) => `<span role="columnheader">${esc(h)}</span>`).join(""))}
     </div>
-    ${raw(list.map((row, i) => `<div class="trow" role="row" style="${cols}" data-act="pick" data-index="${i}" data-focused="${i === cursor ? 1 : 0}">
+    ${raw(list.map((row, i) => `<div class="trow" role="row" style="${cols}" data-act="pick" data-index="${i}" data-focused="${i === cursor ? 1 : 0}"${row.tone ? ` data-level="${esc(row.tone)}"` : ""}>
       ${row.cells.map((c, j) => `<span class="${j === 0 ? "tname" : "tdim"}">${row.html?.[j] ? c : esc(c)}</span>`).join("")}
     </div>`).join(""))}
     ${raw(section === "people" ? `<form class="addbar" data-act-submit="addPerson"><input class="field" name="name" placeholder="Имя" aria-label="Имя человека" autocomplete="off" required><button class="btn btn--ghost btn--sm" type="submit">Добавить</button></form>` : "")}
@@ -309,6 +367,14 @@ function railContext(state) {
     ${raw(row.detail.self ? "" : `<div class="insp-foot"><button class="btn btn--ghost" type="button" data-act="removePerson" data-id="${esc(row.detail.id)}">Убрать</button></div>`)}`;
   }
 
+  if (row && section === "log") {
+    return html`<div class="insp-block">
+      <h2 class="insp-name">${row.detail.m}</h2>
+      <p class="prose">${log.levelName(row.detail.l)} · ${row.detail.s} · ${new Date(row.detail.t).toLocaleString("ru")}</p>
+      ${raw(row.detail.d ? `<pre class="mono logdump">${esc(row.detail.d)}</pre>` : "")}
+    </div>`;
+  }
+
   if (row && section === "aisles") {
     return html`<div class="insp-block">
       <h2 class="insp-name">${row.detail.name}</h2>
@@ -353,6 +419,24 @@ function railContext(state) {
     people: html`<div class="insp-block">
       <div class="label">Как добавить</div>
       <p class="prose">Сделай человека коллаборатором приватного репозитория на GitHub, дальше он открывает то же приложение и вводит свой ключ.</p>
+    </div>`,
+    log: html`<div class="insp-block">
+      <div class="label">Сколько всего весит</div>
+      <div class="insp-row"><span>Состояние в браузере</span><span class="tdim num">${bytes(stateSize())}</span></div>
+      <div class="insp-row"><span>Чеков</span><span class="tdim num">${state.receipts.length}</span></div>
+      <div class="insp-row"><span>Приёмов пищи</span><span class="tdim num">${state.meals.length}</span></div>
+      <div class="insp-row"><span>Продуктов в истории</span><span class="tdim num">${Object.keys(state.history).length}</span></div>
+    </div>
+    <div class="insp-block">
+      <div class="label">Что записано</div>
+      <div class="insp-row"><span>Строк в журнале</span><span class="tdim num">${log.counts().all}</span></div>
+      <div class="insp-row"><span>Предупреждений</span><span class="tdim num">${log.counts().warn}</span></div>
+      <div class="insp-row"><span>Сбоев</span><span class="tdim num">${log.counts().fail}</span></div>
+      <p class="prose">Журнал живёт только в этом браузере, никуда не уходит и обрезается до четырёхсот последних строк. Если что-то сломалось — скопируй и пришли.</p>
+    </div>
+    <div class="insp-foot">
+      <button class="btn" type="button" data-act="copyLog">Скопировать журнал</button>
+      <button class="btn btn--ghost" type="button" data-act="clearLog">Очистить</button>
     </div>`,
     danger: html`<div class="insp-block">
       <div class="label">Что именно сотрётся</div>
@@ -490,10 +574,28 @@ export default {
     async syncNow() {
       try {
         const report = await sync();
-        toast(`Синхронизировано · ${report.collections.length} разделов`);
+        toast(
+          report.pushed === 0
+            ? "Всё уже совпадает — писать было нечего"
+            : `Отправлено ${report.pushed} ${report.pushed === 1 ? "раздел" : "разделов"}${report.skipped ? ` · ${report.skipped} без изменений` : ""}`
+        );
       } catch (err) {
         toast(`Не прошло: ${err.message}`, "alarm");
       }
+    },
+
+    async copyLog() {
+      const text = log.asText();
+      if (!text) return toast("Журнал пуст");
+      const ok = await copyText(text);
+      toast(ok ? `Журнал скопирован · ${log.counts().all} строк` : "Не удалось скопировать", ok ? "calm" : "alarm");
+    },
+
+    clearLog() {
+      const n = log.counts().all;
+      log.clear();
+      touch();
+      toast(`Журнал очищен · было ${n} строк`);
     },
 
     async pullRefs() {

@@ -10,6 +10,8 @@ import * as M from "../lib/model.js";
 import { sameProduct, findInStock, match, rank, stepDown, lineMatchesProduct } from "../lib/recipes.js";
 import { purchaseRhythm } from "../lib/model.js";
 import { mergeById, mergeHistory, dropTombstones } from "../lib/sync.js";
+import { unchanged } from "../lib/github.js";
+import * as log from "../lib/log.js";
 import { parseTable, parseShelf, parseSynonyms, parseRecipe } from "../lib/vault.js";
 import { priceHistory, bestStore, trackingSummary, weekStart, staples } from "../lib/planning.js";
 import { SEED_SHELF, SEED_SYNONYMS, SEED_JUNK, SEED_AISLES } from "../lib/store.js";
@@ -438,4 +440,81 @@ test("неделя начинается с понедельника", () => {
   const start = weekStart(Date.UTC(2026, 7, 15)); // суббота
   assert.equal(new Date(start).getUTCDay(), 1);
   assert.equal(M.daysBetween(start, Date.UTC(2026, 7, 15)), 5);
+});
+
+/* ---------- запись наружу: что не изменилось, то не пишется ---------- */
+
+test("одинаковое содержимое не переписывается", () => {
+  // Каждый синк писал все восемь файлов, даже когда ничего не менялось:
+  // восемь запросов в лимит и восемь пустых коммитов в истории, которую
+  // человек читает глазами.
+  const text = JSON.stringify({ a: 1, b: [2, 3] }, null, 2);
+
+  assert.equal(unchanged(text, text), true, "байт в байт");
+  assert.equal(unchanged(`${text}\n`, text), true, "перевод строки в конце — не содержимое");
+  assert.equal(unchanged(null, text), false, "файла ещё нет — писать надо");
+});
+
+test("порядок ключей и отступы не считаются изменением", () => {
+  // Состав чека пишет Action на питоне, а состояние — браузер. Один и тот же
+  // объект приходит с другим порядком ключей, и посимвольное сравнение решило
+  // бы, что файл изменился, — снова коммит на пустом месте.
+  const mine = JSON.stringify({ product: "Молоко", price: 89 }, null, 2);
+  const theirs = '{"price": 89, "product": "Молоко"}';
+
+  assert.equal(unchanged(theirs, mine), true);
+  assert.equal(unchanged('{"price": 96, "product": "Молоко"}', mine), false, "цена другая — это изменение");
+});
+
+test("порядок в массиве — это содержимое", () => {
+  // Отделы упорядочены обходом зала; переставленные строки менять надо.
+  const mine = JSON.stringify([{ n: 1 }, { n: 2 }], null, 2);
+  assert.equal(unchanged(JSON.stringify([{ n: 2 }, { n: 1 }]), mine), false);
+});
+
+test("нечитаемый remote не выдаётся за совпадение", () => {
+  // Иначе битый файл в репозитории тихо блокировал бы любую запись поверх.
+  assert.equal(unchanged("{не json", "{}"), false);
+});
+
+/* ---------- журнал ---------- */
+
+test("журнал не растёт бесконечно", () => {
+  log.clear();
+  for (let i = 0; i < 450; i += 1) log.info("тест", `строка ${i}`);
+
+  const all = log.entries();
+  assert.equal(all.length, 400, "кольцо обрезается до потолка");
+  assert.equal(all.at(-1).m, "строка 449", "последняя запись — самая свежая");
+  assert.equal(all[0].m, "строка 50", "самые старые вытеснены");
+});
+
+test("журнал считает отдельно сбои и предупреждения", () => {
+  log.clear();
+  log.info("тест", "обычное");
+  log.warn("тест", "медленно");
+  log.fail("тест", "сломалось");
+
+  assert.deepEqual(log.counts(), { all: 3, warn: 1, fail: 1 });
+  assert.deepEqual(log.entries({ level: "e" }).map((e) => e.m), ["сломалось"]);
+  assert.deepEqual(log.entries({ src: "другое" }), [], "фильтр по источнику");
+});
+
+test("длинная нагрузка обрезается, а не роняет запись", () => {
+  // Стек ошибки или тело ответа GitHub легко на килобайты — журнал делит
+  // квоту с самими данными, и данные важнее.
+  log.clear();
+  log.fail("тест", "ошибка", { stack: "x".repeat(5000) });
+
+  const entry = log.entries().at(-1);
+  assert.ok(entry.d.length <= 241, `нагрузка обрезана, а не ${entry.d.length}`);
+  assert.ok(entry.d.endsWith("…"), "видно, что обрезано");
+});
+
+test("журнал отдаётся текстом для пересылки", () => {
+  log.clear();
+  log.warn("синк", "круг · 4200 мс", "квота 58");
+
+  const text = log.asText();
+  assert.match(text, /W \[синк\] круг · 4200 мс — квота 58/);
 });

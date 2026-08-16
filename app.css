@@ -544,8 +544,13 @@ button {
 
 /* ---------- tab bar ---------- */
 
+/* Two rows, not one. Sharing a single row with the status strip left the seven
+   tabs 122px of a 375px phone to live in: five of them scrolled off screen, and
+   nothing on the bar said so. Navigation gets the full width; the strip that
+   says whether anything synced sits above it. */
 .tabs {
   display: flex;
+  flex-direction: column;
   order: 2;
   border-top: 1px solid rgba(28, 51, 39, 0.12);
   background: var(--bg);
@@ -1526,6 +1531,7 @@ button {
 
 .tabs-scroll {
   display: flex;
+  order: 2;
   flex: 1;
   min-width: 0;
   overflow-x: auto;
@@ -1552,7 +1558,7 @@ button {
   gap: 10px;
   order: 1;
   padding: 7px var(--pad) 7px 12px;
-  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
 
@@ -2740,6 +2746,9 @@ kbd {
   }
 
   .tabs-scroll {
+    /* The phone stacks the status strip above the tabs; the sidebar puts it
+       last, so both orders are stated rather than inherited by accident. */
+    order: 1;
     flex: none;
     flex-direction: column;
     overflow: visible;
@@ -2748,10 +2757,12 @@ kbd {
 
   .tabs-foot {
     display: flex;
+    order: 2;
     flex-direction: column;
     gap: 4px;
     margin-top: auto;
     padding-top: 12px;
+    border-bottom: 0;
     border-top: 1px solid rgba(244, 241, 230, 0.12);
   }
 
@@ -2890,6 +2901,33 @@ kbd {
   .foot {
     max-width: 900px;
   }
+}
+
+/* --- Журнал -------------------------------------------------------------
+   A log is scanned, not read: the eye is looking for the two lines that are not
+   routine. So level is carried by the ink of the message itself — no rules, no
+   tinted bands, nothing that turns a table into a warning poster. */
+
+.trow[data-level="e"] span:last-child,
+.insp-row[data-level="e"] span:first-child {
+  color: var(--alarm);
+}
+
+.trow[data-level="w"] span:last-child,
+.insp-row[data-level="w"] span:first-child {
+  color: var(--accent-deep);
+}
+
+.logdump {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

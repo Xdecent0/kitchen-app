@@ -5,7 +5,7 @@
 // 375px, so this is the one question a big screen can answer that a phone cannot:
 // is it actually cheaper there, and what went up.
 
-import { html, raw, icon, esc, fmtMoney, fmtDate, toast, wide } from "../lib/dom.js";
+import { html, raw, icon, esc, fmtMoney, fmtDate, toast, wide, fmtAlso } from "../lib/dom.js";
 import { commit, uid, touch } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import * as P from "../lib/planning.js";
@@ -76,6 +76,7 @@ function answerOf(state, table) {
   return {
     value: total ? total.toLocaleString("ru") : String(comparable.length),
     unit: total ? state.currency : M.plural(comparable.length, "продукт", "продукта", "продуктов"),
+    money: total || null,
     note: total
       ? `столько стоит разница за год привычных покупок · сравнение открыто по ${comparable.length} из ${table.rows.length}`
       : `сравнение открыто, но разницы в ценах пока не видно`,
@@ -182,6 +183,7 @@ function desk(state) {
       <aside class="inspector" aria-label="Подробности">
         <div class="answer">
           <p class="answer-value">${answer.value}${raw(answer.unit ? `<span class="answer-unit">${esc(answer.unit)}</span>` : "")}</p>
+          ${raw(answer.money != null ? fmtAlso(answer.money) : "")}
           <p class="answer-note">${answer.note}</p>
         </div>
         ${raw(row ? productPane(state, row) : storesPane(state, table))}

@@ -12,6 +12,7 @@ import { demoState, reset as resetStore, EMPTY_STATE, size as stateSize } from "
 import * as log from "../lib/log.js";
 import * as INSTALL from "../lib/install.js";
 import * as QR from "../lib/qr.js";
+import * as MONEY from "../lib/money.js";
 import { encodePairing } from "../lib/pair.js";
 import { copy as copyText } from "../lib/share.js";
 import * as M from "../lib/model.js";
@@ -34,6 +35,7 @@ const SECTIONS = [
   { key: "synonyms", name: "Синонимы" },
   { key: "aisles", name: "Отделы" },
   { key: "rules", name: "Выучено из чеков" },
+  { key: "money", name: "Валюты" },
   { key: "log", name: "Журнал" },
   { key: "danger", name: "Опасная зона", apart: true },
 ];
@@ -53,6 +55,7 @@ function countOf(key, state) {
   if (key === "aisles") return state.aisles.length;
   if (key === "rules") return Object.keys(state.rules).length;
   // The count that matters in a journal is the number of things that went wrong.
+  if (key === "money") return (state.showCurrencies ?? []).length;
   if (key === "log") return log.counts().fail + log.counts().warn;
   return null;
 }
@@ -153,6 +156,41 @@ function journalPane(state) {
       <button class="btn btn--ghost btn--grow" type="button" data-act="copyLog">Скопировать журнал</button>
       <button class="btn btn--ghost" type="button" data-act="clearLog">Очистить</button>
     </div>
+  </section>`;
+}
+
+/**
+ * Which currencies to show next to the hryvnia.
+ *
+ * Hryvnia stays the currency of record — it is what the till printed. The others
+ * are a view, and only next to sums that are themselves the answer: three
+ * currencies on every line of a shopping list is not convenience, it is noise
+ * with a decimal point.
+ */
+function currencyPane(state) {
+  const show = state.showCurrencies ?? [];
+  const rates = state.rates;
+  const age = MONEY.ratesAge(rates);
+
+  const chips = MONEY.CURRENCIES.filter((c) => c.code !== "UAH")
+    .map((c) => `<button class="chip" type="button" data-act="currency" data-code="${c.code}" aria-pressed="${show.includes(c.code)}">${esc(c.symbol)} ${esc(c.name)}</button>`)
+    .join("");
+
+  const today = rates?.days ? MONEY.rateFor(rates, "USD", Date.now()) : null;
+  const eur = rates?.days ? MONEY.rateFor(rates, "EUR", Date.now()) : null;
+
+  return html`<section class="pane">
+    <div class="label">Показывать рядом</div>
+    <p class="prose">Записывается всё в гривне — так напечатал чек. Доллар и евро считаются поверх, и каждая сумма пересчитывается по курсу своего дня: покупка в марте — по мартовскому курсу, а не по сегодняшнему.</p>
+    <div class="chips" role="group" aria-label="Дополнительные валюты">${raw(chips)}</div>
+    ${raw(rates?.days
+      ? `<div class="figures figures--tight">
+           <div class="figure"><span class="figure-n num">${esc(String(today?.rate ?? "–"))}</span><span class="figure-t">₴ за доллар</span></div>
+           <div class="figure"><span class="figure-n num">${esc(String(eur?.rate ?? "–"))}</span><span class="figure-t">₴ за евро</span></div>
+           <div class="figure"><span class="figure-n num">${Object.keys(rates.days).length}</span><span class="figure-t">дней в истории</span></div>
+         </div>
+         <p class="prose prose--muted">Курсы Национального банка, обновляются сами раз в сутки${age != null && age > 2 ? ` · последний раз ${age} ${esc(M.plural(age, "день", "дня", "дней"))} назад` : ""}.</p>`
+      : `<p class="prose prose--muted">Курсов ещё нет. Они приезжают из репозитория данных — синхронизируйся, а если файла нет вовсе, значит расписание в Actions ещё ни разу не отработало.</p>`)}
   </section>`;
 }
 
@@ -258,6 +296,7 @@ function phone(state) {
         </div>
       </section>
 
+      ${raw(currencyPane(state))}
       ${raw(installPane())}
       ${raw(journalPane(state))}
 
@@ -361,6 +400,10 @@ function sectionBody(state) {
         <p class="prose">GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens. Доступ дай только репозиторию с данными, права Contents: Read and write.</p>
       </details>
     </div>`;
+  }
+
+  if (section === "money") {
+    return html`<div class="setpane">${raw(currencyPane(state))}</div>`;
   }
 
   if (section === "danger") {
@@ -515,6 +558,11 @@ function railContext(state) {
     aisles: html`<div class="insp-block">
       <div class="label">Откуда это</div>
       <p class="prose">Таблица из <code class="mono">Справочники/Отделы.md</code>. Порядок строк повторяет порядок, в котором ты идёшь по залу.</p>
+    </div>`,
+    money: html`<div class="insp-block">
+      <div class="label">Откуда курсы</div>
+      <p class="prose">Официальные курсы Национального банка. Их привозит то же расписание Actions, что отвечает на задания — браузер сам за ними сходить не может.</p>
+      <p class="prose">Каждая сумма считается по курсу своего дня. Если для той даты курса нет — берётся ближайший предыдущий, как в банке за выходные; если истории не хватает вовсе, строка тускнеет, а не притворяется точной.</p>
     </div>`,
     rules: html`<div class="insp-block">
       <div class="label">Как это копится</div>
@@ -695,6 +743,18 @@ export default {
       } catch (err) {
         toast(`Не прошло: ${err.message}`, "alarm");
       }
+    },
+
+    currency(el) {
+      const code = el.dataset.code;
+      commit("currency.show", (s) => {
+        const show = new Set(s.showCurrencies ?? []);
+        if (show.has(code)) show.delete(code);
+        else show.add(code);
+        // Fixed order, so the line under a number never reshuffles itself.
+        s.showCurrencies = MONEY.CURRENCIES.map((c) => c.code).filter((c) => show.has(c));
+        return null;
+      }, { sync: false });
     },
 
     pairShow() {

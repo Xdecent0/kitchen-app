@@ -105,7 +105,7 @@ log.info("приложение", "запуск", { экран: location.hash || 
     // than making the person choose between their data and a working sync.
     replace(stripDemo(s), "demo.strip");
   }
-  setCurrency(get().currency);
+  setCurrency(get().currency, { rates: get().rates, show: get().showCurrencies ?? [] });
 }
 
 function parseHash() {
@@ -241,7 +241,7 @@ window.addEventListener("hashchange", () => {
 });
 
 subscribe(() => {
-  setCurrency(get().currency);
+  setCurrency(get().currency, { rates: get().rates, show: get().showCurrencies ?? [] });
   render();
 });
 /* The queue has to leave on its own: the shop is the last place anyone opens

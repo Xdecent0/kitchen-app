@@ -6,7 +6,7 @@
 // finds are the one thing here that feeds the core — products worth never
 // running out of go straight into the list.
 
-import { html, raw, icon, esc, fmtMoney, toast, wide } from "../lib/dom.js";
+import { html, raw, icon, esc, fmtMoney, toast, wide , fmtAlso } from "../lib/dom.js";
 import { commit, uid, touch } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import * as P from "../lib/planning.js";
@@ -194,12 +194,14 @@ function railPeriod(state, now) {
     ? {
         value: Math.round(groceries + s.spent).toLocaleString("ru"),
         unit: state.currency,
+        money: groceries + s.spent,
         note: `${Math.round(groceries).toLocaleString("ru")} продукты · ${Math.round(s.spent).toLocaleString("ru")} вне дома`,
       }
     : { value: "Нет записей", note: "Отметь пару приёмов пищи, и здесь появится ритм и сумма." };
 
   return html`<div class="answer">
     <p class="answer-value">${answer.value}${raw(answer.unit ? `<span class="answer-unit">${esc(answer.unit)}</span>` : "")}</p>
+    ${raw(answer.money != null ? fmtAlso(answer.money) : "")}
     <p class="answer-note">${answer.note}</p>
   </div>
 

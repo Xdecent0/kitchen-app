@@ -5,7 +5,7 @@
 // consequence have to be visible together, so the week is a canvas and the
 // picker lives in the rail instead of replacing the week the person is planning.
 
-import { html, raw, icon, esc, toast, fmtDate, fmtMoney, wide } from "../lib/dom.js";
+import { html, raw, icon, esc, toast, fmtDate, fmtMoney, wide , fmtAlso } from "../lib/dom.js";
 import { commit, uid, touch } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import { mark } from "../lib/sync.js";
@@ -186,7 +186,7 @@ function railWeek(state, stock, start) {
   const answer = !coverage.planned
     ? { value: "Пусто", note: "Ни один приём не запланирован. Нажми на ячейку — подбор появится здесь." }
     : gap.length
-      ? { value: total ? Math.round(total).toLocaleString("ru") : String(gap.length), unit: total ? state.currency : M.plural(gap.length, "продукт", "продукта", "продуктов"), note: `столько стоит докупить · ${coverage.ready} из ${coverage.planned} блюд готовятся без магазина` }
+      ? { value: total ? Math.round(total).toLocaleString("ru") : String(gap.length), unit: total ? state.currency : M.plural(gap.length, "продукт", "продукта", "продуктов"), money: total || null, note: `столько стоит докупить · ${coverage.ready} из ${coverage.planned} блюд готовятся без магазина` }
       : {
           value: "Ничего не нужно",
           note: coverage.planned === 1
@@ -204,6 +204,7 @@ function railWeek(state, stock, start) {
 
   return html`<div class="answer">
     <p class="answer-value">${answer.value}${raw(answer.unit ? `<span class="answer-unit">${esc(answer.unit)}</span>` : "")}</p>
+    ${raw(answer.money != null ? fmtAlso(answer.money) : "")}
     <p class="answer-note">${answer.note}</p>
   </div>
 

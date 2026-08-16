@@ -14,6 +14,7 @@ import { unchanged } from "../lib/github.js";
 import { candidates } from "../lib/trip.js";
 import { encodePairing, parsePairing } from "../lib/pair.js";
 import { encode, versionFor } from "../lib/qr.js";
+import * as M_MONEY from "../lib/money.js";
 import * as log from "../lib/log.js";
 import { parseTable, parseShelf, parseSynonyms, parseRecipe } from "../lib/vault.js";
 import { priceHistory, bestStore, trackingSummary, weekStart, staples } from "../lib/planning.js";
@@ -846,4 +847,60 @@ test("QR-код собирается для полезной нагрузки л
   assert.equal(code.size, code.version * 4 + 17);
   assert.equal(code.get(0, 0), 1, "левый верхний глаз на месте");
   assert.equal(code.get(8, code.size - 8), 1, "тёмный модуль на месте");
+});
+
+/* ---------- доллары и евро поверх гривны ---------- */
+
+const RATES = {
+  base: "UAH",
+  updated: T0,
+  days: {
+    "2026-03-10": { USD: 39.5, EUR: 43.0 },
+    "2026-08-14": { USD: 44.7, EUR: 51.5 },
+    "2026-08-15": { USD: 44.7, EUR: 51.5 },
+  },
+};
+
+test("сумма пересчитывается по курсу своего дня, а не сегодняшнего", () => {
+  // Покупка в марте по мартовскому курсу. Пересчёт годовалой траты по
+  // сегодняшнему курсу — не то, во что она обошлась.
+  const march = M_MONEY.convert(3950, "USD", { rates: RATES, at: Date.UTC(2026, 2, 10) });
+  assert.equal(Math.round(march.value), 100);
+  assert.equal(march.basis, "exact");
+
+  const august = M_MONEY.convert(4470, "USD", { rates: RATES, at: Date.UTC(2026, 7, 14) });
+  assert.equal(Math.round(august.value), 100);
+});
+
+test("на выходной берётся курс ближайшего предыдущего дня", () => {
+  // Банк курса за воскресенье не публикует — берётся пятничный, как в жизни.
+  const sunday = M_MONEY.convert(4470, "USD", { rates: RATES, at: Date.UTC(2026, 7, 16) });
+  assert.equal(sunday.basis, "nearest");
+  assert.equal(sunday.day, "2026-08-15");
+});
+
+test("для даты старше всей истории курс помечается как поздний", () => {
+  const ancient = M_MONEY.convert(1000, "USD", { rates: RATES, at: Date.UTC(2025, 0, 1) });
+  assert.equal(ancient.basis, "latest", "нужно сказать, что курс не тот");
+});
+
+test("без курсов ничего не выдумывается", () => {
+  assert.equal(M_MONEY.convert(1000, "USD", { rates: null }), null);
+  assert.equal(M_MONEY.alongside(1000, { rates: null, show: ["USD"] }), null);
+  assert.equal(M_MONEY.alongside(1000, { rates: RATES, show: [] }), null, "не просили — не показываем");
+});
+
+test("строка рядом собирается в заданном порядке и помечает устаревший курс", () => {
+  const fresh = M_MONEY.alongside(4470, { rates: RATES, at: Date.UTC(2026, 7, 14), show: ["USD", "EUR"] });
+  // Ниже сотни показывается десятая: «87 €» вместо 86,8 — уже не та сумма.
+  assert.match(fresh.text, /^≈ 100 \$ · 86,8 €$/);
+  assert.equal(fresh.stale, false);
+
+  const old = M_MONEY.alongside(4470, { rates: RATES, at: Date.UTC(2025, 0, 1), show: ["USD"] });
+  assert.equal(old.stale, true);
+});
+
+test("гривна сама себя не пересчитывает", () => {
+  assert.equal(M_MONEY.convert(100, "UAH", { rates: RATES }).value, 100);
+  assert.equal(M_MONEY.alongside(100, { rates: RATES, show: ["UAH"] }), null);
 });

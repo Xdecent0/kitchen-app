@@ -465,7 +465,92 @@ def normalize_qty(value):
     return str(value).strip()
 
 
+# --------------------------------------------------------------------------- #
+# exchange rates
+# --------------------------------------------------------------------------- #
+
+RATES_FILE = Path("Состояние/курсы.json")
+RATE_CODES = ("USD", "EUR")
+
+# The National Bank publishes its official rates openly: no key, no quota, no
+# account. It is also the right source rather than merely a free one — these are
+# the rates the receipts were actually paid at.
+NBU_URL = "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange"
+
+
+def fetch_day_rates(day: str) -> dict:
+    """Rates for one YYYY-MM-DD, as hryvnia per unit — the way a bank quotes them."""
+    res = requests.get(
+        NBU_URL,
+        params={"date": day.replace("-", ""), "json": ""},
+        timeout=TIMEOUT,
+        headers={"User-Agent": UA},
+    )
+    res.raise_for_status()
+
+    out = {}
+    for row in res.json():
+        code = row.get("cc")
+        if code in RATE_CODES and isinstance(row.get("rate"), (int, float)):
+            out[code] = round(float(row["rate"]), 4)
+    return out
+
+
+def fetch_rates(payload: dict) -> dict:
+    """On demand, from the app. `days` back from today, one request per day."""
+    import datetime
+
+    back = max(1, min(int(payload.get("days") or 1), 40))
+    today = datetime.date.today()
+    days = {}
+
+    for step in range(back):
+        day = (today - datetime.timedelta(days=step)).isoformat()
+        try:
+            found = fetch_day_rates(day)
+        except Exception as err:  # noqa: BLE001 — one bad day must not lose the rest
+            print(f"курс за {day}: {err}", file=sys.stderr)
+            continue
+        # Weekends repeat Friday's rate; storing them anyway keeps lookups simple.
+        if found:
+            days[day] = found
+
+    if not days:
+        raise ValueError("НБУ не отдал ни одного курса")
+    return {"days": days}
+
+
+def update_rates_file(back: int = 1) -> int:
+    """Merge fresh rates into the state file. Used by the scheduled run."""
+    import time
+
+    existing = {"base": "UAH", "days": {}}
+    if RATES_FILE.exists():
+        try:
+            existing = json.loads(RATES_FILE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            print("курсы.json не разбирается — пишу заново", file=sys.stderr)
+
+    days = dict(existing.get("days") or {})
+    before = len(days)
+    days.update(fetch_rates({"days": back})["days"])
+
+    # Two years is far more history than any receipt here will ever need.
+    for day in sorted(days)[:-800]:
+        del days[day]
+
+    RATES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    RATES_FILE.write_text(
+        json.dumps({"base": "UAH", "updated": int(time.time() * 1000), "days": days}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    print(f"курсы: было {before} дней, стало {len(days)}")
+    return 0
+
+
 HANDLERS = {
+    "rates": fetch_rates,
     "receipt-qr": fetch_receipt_qr,
     "receipt-qr-photo": fetch_receipt_qr_photo,
     "receipt-ocr": fetch_receipt_ocr,
@@ -585,4 +670,7 @@ def selftest() -> int:
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         raise SystemExit(selftest())
+    if "--rates" in sys.argv:
+        # A first run has no history at all, so it backfills a month.
+        raise SystemExit(update_rates_file(1 if RATES_FILE.exists() else 30))
     raise SystemExit(main())

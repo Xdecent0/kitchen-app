@@ -7,7 +7,7 @@
 // the list itself, and the answer panel: the trip's cost up top as one number and
 // one sentence, dense context underneath.
 
-import { html, raw, icon, esc, cap, fmtMoney, toast, wide } from "../lib/dom.js";
+import { html, raw, icon, esc, cap, fmtMoney, toast, wide , fmtAlso } from "../lib/dom.js";
 import { commit, uid, touch } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import * as T from "../lib/trip.js";
@@ -301,6 +301,7 @@ function answerPanel(state, plan) {
 
   return html`<div class="answer">
     <p class="answer-value">${answer.value}${raw(answer.unit ? `<span class="answer-unit">${esc(answer.unit)}</span>` : "")}</p>
+    ${raw(answer.money != null ? fmtAlso(answer.money) : "")}
     <p class="answer-note">${answer.note}</p>
   </div>`;
 }

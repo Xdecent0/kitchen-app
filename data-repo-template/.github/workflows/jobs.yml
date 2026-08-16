@@ -7,6 +7,11 @@ on:
   push:
     paths:
       - "Задания/вход/**.json"
+  # Rates are per day and the app cannot fetch them itself, so they arrive on a
+  # schedule rather than being requested. 06:20 UTC: the National Bank publishes
+  # the day's official rates in the morning.
+  schedule:
+    - cron: "20 6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -47,14 +52,20 @@ jobs:
       - name: Run pending jobs
         run: python scripts/run_jobs.py
 
+      - name: Refresh exchange rates
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: python scripts/run_jobs.py --rates
+
       - name: Commit answers
         run: |
           git config user.name "kitchen-bot"
           git config user.email "kitchen-bot@users.noreply.github.com"
-          git add -A "Задания"
+          git add -A "Задания" "Состояние/курсы.json" || git add -A "Задания"
           if git diff --cached --quiet; then
             echo "nothing to commit"
           else
             git commit -m "kitchen: ответы на задания"
+            # The app writes to this repo too, so a rebase beats a failed push.
+            git pull --rebase --quiet || true
             git push
           fi

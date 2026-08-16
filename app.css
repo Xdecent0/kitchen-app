@@ -2588,6 +2588,20 @@ kbd {
   color: var(--ink);
 }
 
+/* The converted sum sits under the number, quieter than it and quieter than the
+   sentence below — it is the same answer said again, not a second answer. */
+.also {
+  display: block;
+  margin: -2px 0 6px;
+  font-size: var(--t-meta);
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.also[data-stale] {
+  color: var(--ink-5);
+}
+
 /* --- код подключения ----------------------------------------------------
    White quiet zone around the code is not decoration: a scanner needs it, and
    on the cream ground the code would otherwise bleed into the page. */

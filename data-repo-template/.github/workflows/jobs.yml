@@ -36,7 +36,13 @@ jobs:
           fi
 
       - name: Install Python deps
-        run: pip install --quiet requests beautifulsoup4 lxml pillow pytesseract
+        run: |
+          pip install --quiet requests beautifulsoup4 lxml pillow pytesseract
+          # Safari has no BarcodeDetector, so an iPhone photographs the QR and
+          # the decoding happens here. headless keeps it to one wheel, no X11.
+          if ls Задания/вход/*.json >/dev/null 2>&1 && grep -l '"receipt-qr-photo"' Задания/вход/*.json >/dev/null 2>&1; then
+            pip install --quiet opencv-python-headless numpy
+          fi
 
       - name: Run pending jobs
         run: python scripts/run_jobs.py

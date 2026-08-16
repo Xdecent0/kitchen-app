@@ -5,7 +5,7 @@
 // So the network wins whenever it answers, and the cache is the fallback —
 // which is exactly what "works in the store" actually requires.
 
-const CACHE = "kitchen-v10";
+const CACHE = "kitchen-v11";
 
 const SHELL = [
   "./",

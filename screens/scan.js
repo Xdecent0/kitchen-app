@@ -47,20 +47,23 @@ function camera() {
       <video data-video playsinline muted aria-label="Изображение с камеры"></video>
       <div class="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i><span class="reticle-line"></span></div>
       <div class="viewfinder-copy">
-        <strong>${qr ? "Наведи на QR в подвале чека" : "Сфотографируй чек целиком"}</strong>
-        <span>${qr ? "так данные чистые — правки почти не нужны" : "этот браузер не умеет читать QR, пойдём через распознавание фото"}</span>
+        <strong>Наведи на QR в подвале чека</strong>
+        <span>${qr
+          ? "так данные чистые — правки почти не нужны"
+          : "этот браузер не читает QR сам, поэтому сними его — код разберут за нас, данные будут те же чистые"}</span>
       </div>
       <p class="viewfinder-error" data-cam-error hidden></p>
     </div>
 
     ${raw(gh.isConfigured() ? "" : `<div class="notice notice--onblack">Репозиторий данных не подключён — можно прогнать <button class="linkbtn" type="button" data-act="demo">демонстрационный чек</button> и посмотреть, как выглядит разбор.</div>`)}
 
-    <div class="foot foot--onblack">
+    <div class="foot foot--onblack${qr ? "" : " foot--wrap"}">
+      ${raw(qr ? "" : `<button class="btn btn--onblack btn--wide" type="button" data-act="qrPhoto">Снять QR</button>`)}
       <button class="btn btn--ghost btn--onblack btn--grow" type="button" data-act="photo">
-        ${qr ? "QR не читается — снять фото" : "Снять фото"}
+        ${qr ? "QR не читается — снять фото" : "Чек целиком"}
       </button>
       <label class="btn btn--ghost btn--onblack">
-        Выбрать файл
+        Из файла
         <input type="file" accept="image/*" class="sr-only" data-act="file" aria-label="Выбрать фото чека файлом">
       </label>
     </div>
@@ -242,6 +245,18 @@ export default {
 
       const blob = await R.grabPhoto(video);
       startJob("receipt-ocr", () => R.submitPhoto(blob), "Фото снято");
+    },
+
+    /* Browsers without BarcodeDetector: the code is photographed and decoded
+       in the Action, so the clean path stays available on an iPhone. */
+    async qrPhoto() {
+      const video = document.querySelector("[data-video]");
+      if (!video?.videoWidth) {
+        return toast("Камера недоступна — выбери фото чека файлом", "alarm");
+      }
+
+      const blob = await R.grabPhoto(video);
+      startJob("receipt-qr-photo", () => R.submitQrPhoto(blob), "QR снят");
     },
 
     file(input) {

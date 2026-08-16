@@ -45,6 +45,43 @@ def fetch_receipt_qr(payload: dict) -> dict:
     return parsed
 
 
+def fetch_receipt_qr_photo(payload: dict) -> dict:
+    """Read the QR out of a photograph, then follow it like any other QR.
+
+    Safari has no BarcodeDetector, so the live viewfinder path simply does not
+    exist on an iPhone — which is the phone this is used on. The fallback was OCR
+    over the whole receipt: dirty data, lost quantities, a disputed pile every
+    time. But the QR is still printed on the paper. Photographing it and decoding
+    it where the code can run costs one round trip and gives the clean path back.
+    """
+    import cv2
+    import numpy as np
+
+    blob = base64.b64decode(payload["image"])
+    image = cv2.imdecode(np.frombuffer(blob, np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise ValueError("снимок не читается как изображение")
+
+    url = decode_qr(image)
+    if not url:
+        raise ValueError("на снимке не видно QR — попробуй ближе и ровнее, или сними чек целиком")
+
+    return fetch_receipt_qr({"url": url})
+
+
+def decode_qr(image) -> str:
+    """Straight, then upscaled: a QR shot from a hand is often small and soft."""
+    import cv2
+
+    detector = cv2.QRCodeDetector()
+    for scale in (1, 2):
+        frame = image if scale == 1 else cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        found, *_ = detector.detectAndDecode(frame)
+        if found:
+            return found.strip()
+    return ""
+
+
 def parse_receipt_json(data: dict) -> dict:
     """Some tax services answer JSON directly; field names differ by country."""
     doc = data
@@ -371,6 +408,16 @@ def to_markdown(name, minutes, source, ingredients, steps) -> str:
         body += ["", "## Шаги", ""]
         body += [f"{n}. {s}" for n, s in enumerate(steps, 1)]
 
+    # The vault's one rule is class plus connection: a note with tags but no
+    # links is an orphan, and the gate counts it as one. A generated note has no
+    # excuse to be orphaned — it knows exactly where it belongs.
+    body += [
+        "",
+        "## Связано",
+        "",
+        "[[30 - Личное/Кухня/_index|🍳 Кухня]] · [[30 - Личное/Кухня/Справочники/Сроки|⏳ Сроки]]",
+    ]
+
     return "\n".join(head + body) + "\n"
 
 
@@ -420,6 +467,7 @@ def normalize_qty(value):
 
 HANDLERS = {
     "receipt-qr": fetch_receipt_qr,
+    "receipt-qr-photo": fetch_receipt_qr_photo,
     "receipt-ocr": fetch_receipt_ocr,
     "import-recipe": fetch_recipe,
 }
@@ -494,6 +542,28 @@ def selftest() -> int:
     ]
 
     failed = 0
+
+    # The QR path on an iPhone goes through here, so it is checked with a real
+    # code rather than trusted: generate one, decode it back, compare.
+    try:
+        import cv2
+        import numpy as np
+        import qrcode
+
+        url = "https://cabinet.tax.gov.ua/cashregs/check?id=42&fn=4000123456&sm=134.40"
+        buf = io.BytesIO()
+        qrcode.make(url).save(buf, format="PNG")
+        image = cv2.imdecode(np.frombuffer(buf.getvalue(), np.uint8), cv2.IMREAD_COLOR)
+
+        got = decode_qr(image)
+        if got != url:
+            failed += 1
+            print(f"ПРОВАЛ QR: прочитано {got!r}", file=sys.stderr)
+        else:
+            print("selftest: QR со снимка читается")
+    except ImportError as err:
+        print(f"selftest: QR пропущен ({err.name} не установлен локально)")
+
     for name, html, want in cases:
         got = parse_receipt_html(html)
         checks = {

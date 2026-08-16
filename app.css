@@ -1624,6 +1624,12 @@ button {
   border-color: rgba(193, 72, 31, 0.3);
 }
 
+/* The main action takes a row of its own: three buttons across a 375px phone
+   wrap their labels to three lines each and stop looking like buttons. */
+.btn--wide {
+  flex: 1 0 100%;
+}
+
 .foot--wrap {
   flex-wrap: wrap;
 }

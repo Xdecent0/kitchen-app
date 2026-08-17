@@ -1774,9 +1774,11 @@ kbd {
   background: var(--bg);
 }
 
+/* The table's shape follows how many columns actually have anything in them,
+   so an unbought shelf is four honest columns rather than six with dashes. */
 .trow {
   display: grid;
-  grid-template-columns: 32px 1.6fr 0.9fr 0.8fr 0.9fr 1fr 0.7fr;
+  grid-template-columns: 32px 1.7fr 0.9fr 0.8fr 1.3fr;
   gap: 12px;
   align-items: center;
   padding: 12px var(--pad);
@@ -1800,6 +1802,45 @@ kbd {
   color: var(--ink-4);
   text-transform: uppercase;
   cursor: default;
+}
+
+.table[data-cols="6"] .trow {
+  grid-template-columns: 32px 1.6fr 0.9fr 0.8fr 1.2fr 1fr;
+}
+
+.table[data-cols="7"] .trow {
+  grid-template-columns: 32px 1.5fr 0.8fr 0.7fr 1.1fr 0.9fr 0.6fr;
+}
+
+/* Quantity is the answer to "how much is left", so it is read as a value, not
+   as a dim attribute of the row. */
+.tamount {
+  font-variant-numeric: tabular-nums;
+}
+
+.tlife {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.meter--row {
+  width: 44px;
+  flex: none;
+}
+
+/* An opened packet keeps a shorter clock than a sealed one; the row has to say
+   which of the two it is being measured by. */
+.tflag {
+  margin-left: 7px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-firm);
+  font-size: var(--t-label);
+  font-weight: 500;
+  color: var(--ink-4);
+  vertical-align: 1px;
 }
 
 /* A category heading inside the table. It is a band across all the columns, so
@@ -3184,6 +3225,123 @@ kbd {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-x: auto;
+}
+
+/* ---------- pointer states ---------- */
+
+/* The app was built phone-first, where hover does not exist and a sticky
+   :hover left behind by a tap is worse than none. Behind (hover: hover) a
+   mouse gets what a mouse expects: everything clickable answers the pointer,
+   and nothing that is not clickable pretends to.
+   One rule per surface rather than one blanket rule — a row, a chip and a
+   primary button are pressed with different confidence, and a uniform grey
+   wash would say they are the same thing. */
+@media (hover: hover) and (pointer: fine) {
+  .btn,
+  .chip,
+  .seg-btn,
+  .icon-btn,
+  .tab,
+  .row,
+  .trow,
+  .zone,
+  .insp-row,
+  .tcheck,
+  .linkbtn,
+  .setnav-item {
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  }
+
+  .btn:hover {
+    background: var(--ink-2);
+  }
+
+  .btn--ghost:hover,
+  .btn--onblack:hover {
+    background: var(--surface);
+    border-color: var(--line-firm);
+  }
+
+  .btn--danger:hover {
+    background: var(--alarm-bg);
+    border-color: var(--alarm);
+  }
+
+  .chip:hover,
+  .seg-btn:hover,
+  .icon-btn:hover {
+    background: var(--surface);
+    border-color: var(--line-firm);
+  }
+
+  /* A pressed chip is already dark; lightening it on hover would read as
+     unpressing it, so it lifts instead of changing colour. */
+  .chip[aria-pressed="true"]:hover,
+  .seg-btn[aria-pressed="true"]:hover {
+    filter: brightness(1.12);
+  }
+
+  .row:hover,
+  .trow:hover,
+  .insp-row:hover {
+    background: var(--surface);
+  }
+
+  .trow--head:hover,
+  .trow--group:hover {
+    background: var(--bg);
+  }
+
+  .trow[data-burning="1"]:hover {
+    background: var(--alarm-bg);
+    filter: brightness(0.985);
+  }
+
+  .zone:hover {
+    border-color: var(--line-firm);
+    background: var(--surface);
+  }
+
+  .tab:hover {
+    background: rgba(244, 241, 230, 0.08);
+  }
+
+  .tab[aria-current="page"]:hover {
+    background: rgba(244, 241, 230, 0.16);
+  }
+
+  .linkbtn:hover {
+    text-decoration: underline;
+  }
+
+  .tcheck:hover {
+    border-color: var(--ink);
+  }
+
+  .field:hover,
+  .search:hover {
+    border-color: var(--line-firm);
+  }
+
+  /* Everything above is a control. Rows carry a pointer so the hover reads as
+     "this does something" rather than as decoration. */
+  .row,
+  .trow,
+  .zone,
+  .chip,
+  .seg-btn,
+  .tab,
+  .btn,
+  .icon-btn,
+  .tcheck,
+  .linkbtn {
+    cursor: pointer;
+  }
+
+  .trow--head,
+  .trow--group {
+    cursor: default;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

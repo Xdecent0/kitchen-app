@@ -233,7 +233,32 @@ function phone(state) {
 /** Placeholder for a cell we genuinely do not know, kept out of prose punctuation. */
 const none = () => '<span class="tnone" aria-label="неизвестно">–</span>';
 
-const COLUMNS = ["", "продукт", "зона", "остаток", "срок", "где куплен", "цена"];
+/**
+ * How much is left, in the words the entry actually has.
+ *
+ * A typed quantity ("14 штук") beats the three-step level, because it is what
+ * the person wrote down. The level is the fallback and the thing the audit
+ * edits, so both are shown when both are known.
+ */
+function amountCell(entry) {
+  const level = entry.level && entry.level !== "много" ? entry.level : "";
+  if (!entry.qty && !level) return `<span class="tamount">${esc(entry.level ?? "много")}</span>`;
+
+  return [
+    entry.qty ? `<span class="tamount">${esc(entry.qty)}</span>` : "",
+    level ? `<span class="tdim">${esc(level)}</span>` : "",
+  ].join(" ");
+}
+
+/** Shelf life as a bar plus its own words: the bar is scannable, the words are exact. */
+function lifeCell(entry, now) {
+  const f = M.freshness(entry, now);
+  const burns = M.isBurning(entry, now);
+  const label = `<span class="${burns ? "tburn" : "tdim"}">${esc(M.expiryLabel(entry, now))}</span>`;
+
+  if (f.share == null) return `<span class="tnone">срок неизвестен</span>`;
+  return `<span class="meter meter--row" data-tone="${f.tone}" aria-hidden="true"><i style="width:${Math.round(f.share * 100)}%"></i></span>${label}`;
+}
 
 function desk(state) {
   const now = M.today();
@@ -245,9 +270,27 @@ function desk(state) {
   const focused = shown[cursor] ?? null;
   const marked = shown.filter((i) => selected.has(i.id));
 
+  const storeOf = (entry) =>
+    state.receipts.find((r) => (r.lines ?? []).some((l) => lineMatchesProduct(l, entry.product)))?.store ?? null;
+
+  // A column where every single cell is a dash is not information, it is six
+  // dashes. Before the first receipt that is exactly what "где куплен" and
+  // "цена" are, so they appear once there is something to put in them.
+  const showStore = shown.some((i) => storeOf(i));
+  const showPrice = shown.some((i) => i.price);
+
+  const columns = [
+    ["", "tcol-check"],
+    ["продукт", ""],
+    ["сколько", ""],
+    ["зона", ""],
+    ["срок", "tcol-life"],
+    ...(showStore ? [["где куплен", ""]] : []),
+    ...(showPrice ? [["цена", ""]] : []),
+  ];
+
   const row = (entry, index) => {
     const burns = M.isBurning(entry, now);
-    const receipt = state.receipts.find((r) => (r.lines ?? []).some((l) => lineMatchesProduct(l, entry.product)));
     const on = selected.has(entry.id);
 
     return html`<div class="trow" data-act="focus" data-id="${entry.id}" data-index="${index}"
@@ -256,12 +299,12 @@ function desk(state) {
           aria-label="Выделить ${entry.product}">
         ${raw(on ? icon("i-check", { size: 11, stroke: "#f4f1e6", width: 3 }) : "")}
       </button>
-      <span class="tname">${entry.product}</span>
+      <span class="tname">${entry.product}${raw(entry.opened ? ` <span class="tflag">вскрыт</span>` : "")}</span>
+      <span>${raw(amountCell(entry))}</span>
       <span class="tdim">${entry.zone}</span>
-      <span>${raw(entry.qty || entry.level || none())}</span>
-      <span class="${burns ? "tburn" : "tdim"}">${M.expiryLabel(entry, now)}</span>
-      <span class="tdim">${raw(receipt?.store ? esc(receipt.store) : none())}</span>
-      <span class="tprice num">${raw(entry.price ? esc(fmtMoney(entry.price)) : none())}</span>
+      <span class="tlife">${raw(lifeCell(entry, now))}</span>
+      ${raw(showStore ? `<span class="tdim">${storeOf(entry) ? esc(storeOf(entry)) : none()}</span>` : "")}
+      ${raw(showPrice ? `<span class="tprice num">${entry.price ? esc(fmtMoney(entry.price)) : none()}</span>` : "")}
     </div>`;
   };
 
@@ -305,9 +348,9 @@ function desk(state) {
     </div>
 
     <div class="split">
-      <div class="table" role="table" aria-label="Позиции на складе">
+      <div class="table" role="table" aria-label="Позиции на складе" data-cols="${columns.length}">
         <div class="trow trow--head" role="row">
-          ${raw(COLUMNS.map((c) => `<span role="columnheader">${esc(c)}</span>`).join(""))}
+          ${raw(columns.map(([name]) => `<span role="columnheader">${esc(name)}</span>`).join(""))}
         </div>
         ${raw(rows || `<div class="empty"><h2>Здесь пусто</h2><p>По этому фильтру ничего нет${query ? ` — по запросу «${esc(query)}» тоже` : ""}.</p></div>`)}
       </div>

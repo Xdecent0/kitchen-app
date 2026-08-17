@@ -5,7 +5,7 @@ import { html, raw, icon, esc, toast } from "../lib/dom.js";
 import { commit, uid, touch, get } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import { auditCandidates } from "../lib/trip.js";
-import { ZONE_ICON } from "./stock.js";
+import { zoneIcon } from "./stock.js";
 
 let cursor = 0;
 let answers = [];
@@ -19,7 +19,7 @@ const buildCandidates = (state) => auditCandidates(state, M.today());
 
 function card(entry, state, index, total) {
   const now = M.today();
-  const glyph = ZONE_ICON[entry.item?.zone] ?? "i-shelf";
+  const glyph = zoneIcon(state, entry.item?.zone);
 
   const rows = entry.items?.length ?? (entry.item ? 1 : 0);
   const note = entry.kind === "stock"

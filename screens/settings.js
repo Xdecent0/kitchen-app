@@ -18,7 +18,7 @@ import { copy as copyText } from "../lib/share.js";
 import * as M from "../lib/model.js";
 import * as gh from "../lib/github.js";
 import { sync, pullReferences, pullRecipes, referenceReport } from "../lib/sync.js";
-import { parseShelf, parseSynonyms, parseAisles, parseRecipe } from "../lib/vault.js";
+import { parseShelf, parseSynonyms, parseAisles, parseZones, parseRecipe } from "../lib/vault.js";
 
 let checking = false;
 let checkResult = null;
@@ -34,6 +34,7 @@ const SECTIONS = [
   { key: "shelf", name: "Сроки" },
   { key: "synonyms", name: "Синонимы" },
   { key: "aisles", name: "Отделы" },
+  { key: "zones", name: "Зоны" },
   { key: "rules", name: "Выучено из чеков" },
   { key: "money", name: "Валюты" },
   { key: "log", name: "Журнал" },
@@ -53,6 +54,7 @@ function countOf(key, state) {
   if (key === "shelf") return state.shelf.length;
   if (key === "synonyms") return state.synonyms.length;
   if (key === "aisles") return state.aisles.length;
+  if (key === "zones") return (state.zones ?? []).length;
   if (key === "rules") return Object.keys(state.rules).length;
   // The count that matters in a journal is the number of things that went wrong.
   if (key === "money") return (state.showCurrencies ?? []).length;
@@ -339,6 +341,13 @@ function rows(state) {
       detail: e,
     }));
   }
+  if (section === "zones") {
+    return (state.zones ?? []).map((e, i) => ({
+      id: `zone-${i}`,
+      cells: [e.name, e.into ?? "", e.icon ?? ""],
+      detail: e,
+    }));
+  }
   if (section === "rules") {
     return Object.entries(state.rules).map(([raw_, product], i) => ({
       id: `rule-${i}`,
@@ -380,6 +389,7 @@ const HEADS = {
   shelf: ["продукт", "зона", "закрыт", "открыт"],
   synonyms: ["маска в чеке", "продукт"],
   aisles: ["№", "отдел", "что внутри"],
+  zones: ["зона", "куда кладу", "значок"],
   rules: ["строка чека", "продукт"],
   sync: ["что", "метка", "когда"],
   people: ["имя", "роль"],
@@ -519,6 +529,14 @@ function railContext(state) {
       <h2 class="insp-name">${row.detail.m}</h2>
       <p class="prose">${log.levelName(row.detail.l)} · ${row.detail.s} · ${new Date(row.detail.t).toLocaleString("ru")}</p>
       ${raw(row.detail.d ? `<pre class="mono logdump">${esc(row.detail.d)}</pre>` : "")}
+    </div>`;
+  }
+
+  if (row && section === "zones") {
+    const n = (state.stock ?? []).filter((i) => !i.deleted && !i.empty && i.zone === row.detail.name).length;
+    return html`<div class="insp-block">
+      <h2 class="insp-name">${row.detail.name}</h2>
+      <p class="prose">Сейчас здесь ${n} ${M.plural(n, "позиция", "позиции", "позиций")}. Зоны — таблица в волте: добавь строку, и появится хоть погреб, хоть балкон.</p>
     </div>`;
   }
 
@@ -811,6 +829,11 @@ export default {
             s.junk = junk;
           }
           if (refs.aisles.status === "read") s.aisles = parseAisles(refs.aisles.text);
+          // A missing zone table is not an empty kitchen: keep what is there.
+          if (refs.zones?.status === "read") {
+            const zones = parseZones(refs.zones.text);
+            if (zones.length) s.zones = zones;
+          }
           if (parsedRecipes.length) s.recipes = parsedRecipes;
           return null;
         }, { sync: false });

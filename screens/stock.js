@@ -8,24 +8,23 @@ import { mark } from "../lib/sync.js";
 import * as M from "../lib/model.js";
 import { rank, lineMatchesProduct } from "../lib/recipes.js";
 import { toStockItem } from "../lib/receipt.js";
+import { SEED_ZONES } from "../lib/store.js";
 import * as T from "../lib/trip.js";
 
-export const ZONES = ["холодильник", "морозилка", "полка", "овощи"];
+/**
+ * Zones come from the vault table now, not from four words here — a cellar, a
+ * balcony in winter or a second freezer are all real kitchens. These helpers
+ * read whatever the state carries and stay safe when it carries nothing.
+ */
+export const zonesOf = (state) => (state?.zones?.length ? state.zones : SEED_ZONES);
+export const zoneNames = (state) => zonesOf(state).map((z) => z.name);
 
 /** The zone in the accusative, because «в морозилка» is not a sentence. */
-const ZONE_INTO = {
-  холодильник: "в холодильник",
-  морозилка: "в морозилку",
-  полка: "на полку",
-  овощи: "в овощи",
-};
+export const zoneInto = (state, name) =>
+  zonesOf(state).find((z) => z.name === name)?.into ?? `в ${name}`;
 
-export const ZONE_ICON = {
-  холодильник: "i-carton",
-  морозилка: "i-freezer",
-  полка: "i-shelf",
-  овощи: "i-veg",
-};
+export const zoneIcon = (state, name) =>
+  zonesOf(state).find((z) => z.name === name)?.icon ?? "i-shelf";
 
 let filter = "all";
 let zoneFilter = null;
@@ -77,7 +76,7 @@ function groups(state) {
   }
 
   if (grouping === "zone") {
-    return ZONES
+    return zoneNames(state)
       .map((zone) => ({ name: zone, entries: items.filter((i) => i.zone === zone) }))
       .filter((g) => g.entries.length);
   }
@@ -127,10 +126,10 @@ function groupSwitch() {
   </div>`;
 }
 
-export function stockRow(itemEntry, now = M.today()) {
+export function stockRow(itemEntry, now = M.today(), state = null) {
   const f = M.freshness(itemEntry, now);
   const burning = M.isBurning(itemEntry, now);
-  const glyph = ZONE_ICON[itemEntry.zone] ?? "i-shelf";
+  const glyph = zoneIcon(state, itemEntry.zone);
 
   const meter = f.share == null
     ? `<span class="row-qty">срок ?</span>`
@@ -157,8 +156,8 @@ export function stockRow(itemEntry, now = M.today()) {
  * all how a kitchen is actually counted, and a number with a unit dropdown
  * would refuse two of the three.
  */
-function addbar(flat = false, slim = false) {
-  const where = zoneFilter ? ZONE_INTO[zoneFilter] : "на склад";
+function addbar(state, flat = false, slim = false) {
+  const where = zoneFilter ? zoneInto(state, zoneFilter) : "на склад";
 
   return html`<form class="addbar${flat ? " addbar--flat" : ""}${slim ? " addbar--slim" : ""}" data-act-submit="add">
     <input class="field" name="product" placeholder="Добавить ${where}" aria-label="Добавить продукт ${where}" autocomplete="off" required>
@@ -181,7 +180,7 @@ function emptyScreen(state) {
       <div class="empty">
         <h2>О запасах ничего не знаю</h2>
         <p>Дальше склад будет заполняться сам из чеков: отсканируй QR в подвале чека, и позиции со сроками появятся здесь. Но первый раз — то, что уже стоит в холодильнике и на полке, — придётся набрать руками.</p>
-        ${raw(addbar(true))}
+        ${raw(addbar(state, true))}
         <a class="btn btn--ghost" href="#scan">Сканировать чек</a>
         ${raw(pending
           ? `<p class="prose prose--muted">А ещё по ритму покупок накопилось ${pending} ${M.plural(pending, "вопрос", "вопроса", "вопросов")} — ревизия ответит на них за двадцать секунд.</p>
@@ -214,11 +213,11 @@ function phone(state) {
   const burning = items.filter((i) => M.isBurning(i, now));
   const shown = visible(state);
 
-  const zoneCards = ZONES.map((zone) => {
+  const zoneCards = zoneNames(state).map((zone) => {
     const inZone = items.filter((i) => i.zone === zone);
     const hot = inZone.filter((i) => M.isBurning(i, now)).length;
     return html`<button class="zone" type="button" data-act="zone" data-zone="${zone}" aria-pressed="${zoneFilter === zone}">
-      ${raw(icon(ZONE_ICON[zone], { size: 22, stroke: "#1c3327" }))}
+      ${raw(icon(zoneIcon(state, zone), { size: 22, stroke: "#1c3327" }))}
       <span class="zone-name">${cap(zone)}</span>
       <span class="zone-meta num">${inZone.length} · ${hot ? `${hot} ${M.plural(hot, "горит", "горят", "горят")}` : "спокойно"}</span>
     </button>`;
@@ -234,7 +233,7 @@ function phone(state) {
                  <span class="row-why">${esc(`${line.stack.count} ${M.plural(line.stack.count, "штука", "штуки", "штук")}`)}${line.open ? "" : ` · ${esc(M.expiryLabel(line.stack.head, now))}`}</span>
                </span>
              </button>`
-          : `<div class="${line.child ? "row-nest" : ""}">${stockRow(line.entry, now)}</div>`).join(""))}`).join("")
+          : `<div class="${line.child ? "row-nest" : ""}">${stockRow(line.entry, now, state)}</div>`).join(""))}`).join("")
     : html`<div class="empty">
         <h2>Здесь пусто</h2>
         <p>По этому фильтру ничего нет — редкий случай, когда пустой экран означает, что всё в порядке.</p>
@@ -256,7 +255,7 @@ function phone(state) {
       <!-- Under the shelf, not above it: on a phone the job is looking at what
            is there, and a field for typing things in would push the first rows
            off a 375px screen for the sake of the rarer task. -->
-      ${raw(addbar())}
+      ${raw(addbar(state))}
     </div>
 
     <div class="foot">
@@ -419,7 +418,7 @@ function desk(state) {
     </header>
 
     <div class="toolbar">
-      ${raw(addbar(true, true))}
+      ${raw(addbar(state, true, true))}
       <span class="toolbar-sep" aria-hidden="true"></span>
       ${raw(groupSwitch())}
       ${raw(filterChips())}
@@ -430,7 +429,7 @@ function desk(state) {
              <button class="linkbtn" type="button" data-act="bulkToList">в список</button> ·
              <button class="linkbtn" type="button" data-act="bulkOpened">вскрыт</button> ·
              <button class="linkbtn linkbtn--danger" type="button" data-act="bulkDelete">удалить</button>
-             <span class="toolbar-move">переместить: ${ZONES.map((z) =>
+             <span class="toolbar-move">переместить: ${zoneNames(state).map((z) =>
                `<button class="linkbtn" type="button" data-act="bulkZone" data-zone="${esc(z)}">${esc(z)}</button>`).join(" · ")}</span>
            </span>`
         : `<span class="toolbar-hint"><kbd>↑↓</kbd> ходить · <kbd>Space</kbd> выделять · <kbd>Enter</kbd> править · <kbd>Del</kbd> удалить</span>`)}
@@ -481,7 +480,7 @@ function inspector(state, entry, marked, now) {
   <div class="insp-block">
     <div class="label">Где лежит</div>
     <div class="chips">
-      ${raw(ZONES.map((z) => `<button class="chip" type="button" data-act="zone1" data-zone="${esc(z)}" aria-pressed="${entry.zone === z}">${esc(z)}</button>`).join(""))}
+      ${raw(zoneNames(state).map((z) => `<button class="chip" type="button" data-act="zone1" data-zone="${esc(z)}" aria-pressed="${entry.zone === z}">${esc(z)}</button>`).join(""))}
     </div>
   </div>
 
@@ -520,6 +519,12 @@ function inspector(state, entry, marked, now) {
       <span class="tdim num">${r.recipe.minutes ? `${r.recipe.minutes} мин · ` : ""}${r.match.ready ? "всё есть" : `нет ${r.match.missing.length}`}</span>
     </a>`).join("")}
   </div>` : "")}
+
+  <div class="insp-block">
+    <div class="label">Ещё такое же</div>
+    <p class="prose prose--muted">Вторая пачка того же — отдельная запись: свой вкус, своя дата, своё количество. На складе они сложатся в одну строку, которая раскрывается.</p>
+    <button class="btn btn--ghost btn--sm" type="button" data-act="another">Добавить ещё «${entry.product}»</button>
+  </div>
 
   <div class="insp-foot">
     <a class="btn" href="#item/${entry.id}">Открыть карточку</a>
@@ -687,6 +692,35 @@ export default {
       });
 
       if (!changed) touch();
+    },
+
+    /**
+     * A second one of the same thing, as its own record.
+     *
+     * Not "+1 to a counter": two tubs of the same ice cream can be different
+     * flavours with different dates, and the stack exists to keep them apart
+     * while still showing them as one line.
+     */
+    another(_el, state) {
+      const entry = visible(state)[cursor];
+      if (!entry) return;
+
+      // Opened before the commit, not after: commit() is what re-renders, and a
+      // stack that stayed shut would hide the record just created.
+      opened.add((entry.product ?? "").trim().toLowerCase());
+
+      let added = null;
+      commit("stock.another", (s) => {
+        added = toStockItem({ product: entry.product, zone: entry.zone }, {
+          shelf: s.shelf,
+          boughtAt: M.today(),
+          id: uid("s"),
+        });
+        s.stock.push(added);
+        return { kind: "stock", id: added.id };
+      });
+
+      toast(`Ещё одна запись «${entry.product}» — впиши, чем она отличается`);
     },
 
     zone1(el, state) {
@@ -866,7 +900,7 @@ function remove(entries) {
 
 /** Moving between zones is not cosmetic: a freezer keeps things far longer than a shelf. */
 function move(entries, zone) {
-  if (!entries.length || !ZONES.includes(zone)) return;
+  if (!entries.length || !zone) return;
   const ids = entries.map((e) => e.id);
 
   commit("stock.move", (s) => {

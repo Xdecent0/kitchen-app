@@ -3312,6 +3312,57 @@ kbd {
   overflow-x: auto;
 }
 
+/* ---------- scrollbars ---------- */
+
+/* The default Windows bar is a grey trough with square arrows on it — the one
+   piece of chrome loud enough to be the first thing seen on a quiet page. This
+   is the same bar, in the app's own ink, and only on a mouse: touch platforms
+   overlay their own and styling them there only takes the overlay away. */
+@media (hover: hover) and (pointer: fine) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(28, 51, 39, 0.28) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(28, 51, 39, 0.24);
+    /* Drawn as padding rather than as a narrower bar, so the hit area stays a
+       full eleven pixels while the mark itself reads as five. */
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(28, 51, 39, 0.42);
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* On the dark sidebar the same ink would be invisible. */
+  .tabs {
+    scrollbar-color: rgba(244, 241, 230, 0.3) transparent;
+  }
+
+  .tabs ::-webkit-scrollbar-thumb,
+  .tabs::-webkit-scrollbar-thumb {
+    background: rgba(244, 241, 230, 0.26);
+    background-clip: padding-box;
+  }
+}
+
 /* ---------- pointer states ---------- */
 
 /* The app was built phone-first, where hover does not exist and a sticky

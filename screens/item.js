@@ -6,7 +6,7 @@ import { commit, uid } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import { rank, LEVELS, lineMatchesProduct } from "../lib/recipes.js";
 import { mark } from "../lib/sync.js";
-import { ZONE_ICON, ZONES, dateValue } from "./stock.js";
+import { zoneNames, dateValue } from "./stock.js";
 
 const find = (state, id) => state.stock.find((i) => i.id === id);
 
@@ -85,7 +85,7 @@ export default {
         <section class="pane">
           <div class="label">Где лежит</div>
           <div class="chips">
-            ${raw(ZONES.map((z) => `<button class="chip" type="button" data-act="zone" data-zone="${esc(z)}" aria-pressed="${entry.zone === z}">${esc(z)}</button>`).join(""))}
+            ${raw(zoneNames(state).map((z) => `<button class="chip" type="button" data-act="zone" data-zone="${esc(z)}" aria-pressed="${entry.zone === z}">${esc(z)}</button>`).join(""))}
           </div>
         </section>
 

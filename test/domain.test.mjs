@@ -16,7 +16,7 @@ import { encodePairing, parsePairing } from "../lib/pair.js";
 import { encode, versionFor } from "../lib/qr.js";
 import * as M_MONEY from "../lib/money.js";
 import * as log from "../lib/log.js";
-import { parseTable, parseShelf, parseSynonyms, parseRecipe } from "../lib/vault.js";
+import { parseTable, parseShelf, parseSynonyms, parseZones, parseRecipe } from "../lib/vault.js";
 import { toStockItem } from "../lib/receipt.js";
 import { priceHistory, bestStore, trackingSummary, weekStart, staples } from "../lib/planning.js";
 import { SEED_SHELF, SEED_SYNONYMS, SEED_JUNK, SEED_AISLES } from "../lib/store.js";
@@ -962,4 +962,21 @@ test("дата с пачки главнее справочника и рисуе
   assert.equal(f.left, 5);
   // Без этого у выставленного руками срока были бы дни, но не было бы шкалы.
   assert.equal(f.share, 0.5);
+});
+
+test("зоны читаются из таблицы волта, а не из четырёх слов в коде", () => {
+  const md = [
+    "| зона | куда кладу | значок |",
+    "|---|---|---|",
+    "| Погреб | в погреб | i-shelf |",
+    "| балкон | на балкон | |",
+  ].join("\n");
+
+  const zones = parseZones(md);
+  assert.equal(zones.length, 2);
+  assert.equal(zones[0].name, "погреб", "имена приводятся к нижнему регистру: по ним сравниваются записи");
+  assert.equal(zones[0].into, "в погреб");
+  // Значок необязателен — экран сам подставит полку.
+  assert.equal(zones[1].icon, null);
+  assert.equal(zones[1].into, "на балкон");
 });

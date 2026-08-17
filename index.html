@@ -2,87 +2,70 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1c3327">
-<title>Кухня</title>
-<link rel="manifest" href="./manifest.webmanifest">
+<title>Кухня переехала</title>
 <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<style>
+  :root { color-scheme: light dark; }
 
-<!-- iOS reads none of the manifest's icons: without this line "На экран Домой"
-     saves a screenshot of the page as the icon. The status bar stays opaque
-     (`default`) because the layout handles a bottom inset but not a top one. -->
-<link rel="apple-touch-icon" href="./icons/icon-180.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Кухня">
-<link rel="stylesheet" href="./app.css">
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: #fcfaf2;
+    color: #1c3327;
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    body { background: #12180f; color: #e8ece4; }
+    .card { background: #1a2117; border-color: rgba(232, 236, 228, 0.14); }
+    .btn { background: #e8ece4; color: #12180f; }
+    .dim { color: #9aa694; }
+  }
+
+  .card {
+    max-width: 34rem;
+    background: #fff;
+    border: 1px solid rgba(28, 51, 39, 0.12);
+    border-radius: 18px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+  p { margin: 0; }
+  .dim { color: #5e7365; font-size: 14.5px; }
+
+  .btn {
+    align-self: flex-start;
+    margin-top: 6px;
+    padding: 13px 18px;
+    border-radius: 12px;
+    background: #1c3327;
+    color: #f4f1e6;
+    text-decoration: none;
+    font-weight: 600;
+  }
+</style>
 </head>
 <body>
 
-<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
-  <defs>
-    <g id="i-list" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M5 6h14M5 12h14M5 18h9"/></g>
-    <g id="i-stock" fill="none" stroke-width="1.6" stroke-linecap="round"><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M5 11h14M9.5 6.5v2"/></g>
-    <g id="i-recipes" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M7 4v7a5 5 0 0 0 10 0V4"/><path d="M12 16v4"/></g>
-    <g id="i-menu" fill="none" stroke-width="1.6" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></g>
-    <g id="i-store" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M4 9h16l-1.5 11h-13z"/><path d="M4 9l2-4h12l2 4"/></g>
-    <g id="i-track" fill="none" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v4.5l3 2"/></g>
-    <g id="i-receipts" fill="none" stroke-width="1.6" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6M9 13h6"/></g>
-    <!-- A body between the hub and the teeth, or eight ticks around a dot read
-         as a sun rather than a cog. -->
-    <g id="i-settings" fill="none" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6"/><path d="M12 5V2.6M12 19v2.4M5 12H2.6M19 12h2.4M7.05 7.05L5.3 5.3M16.95 16.95l1.75 1.75M16.95 7.05l1.75-1.75M7.05 16.95L5.3 18.7"/></g>
-    <g id="i-check" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7"/></g>
-    <g id="i-search" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></g>
-    <g id="i-share" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8.5 7.5L12 4l3.5 3.5"/><path d="M6 12v7h12v-7"/></g>
-    <g id="i-plus" fill="none" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></g>
-    <g id="i-back" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M14 6l-6 6 6 6"/></g>
-    <g id="i-chev-right" fill="none" stroke-width="1.9" stroke-linecap="round"><path d="M9.5 5.5l6.5 6.5-6.5 6.5"/></g>
-    <g id="i-chev-down" fill="none" stroke-width="1.9" stroke-linecap="round"><path d="M5.5 9.5l6.5 6.5 6.5-6.5"/></g>
-    <g id="i-close" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></g>
-    <g id="i-camera" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></g>
-    <g id="i-freezer" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M12 3v18M4 7.5l16 9M20 7.5l-16 9"/></g>
-    <g id="i-shelf" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18M8 6v6M15 12v6"/></g>
-    <g id="i-veg" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M6 10h12l-1.4 9.5H7.4z"/><path d="M9 10c0-3 1.4-5.5 3-5.5S15 7 15 10"/></g>
-    <g id="i-carton" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M5 8h11l3 4v4H5z"/><path d="M5 12h14"/></g>
-    <g id="i-sync" fill="none" stroke-width="1.7" stroke-linecap="round"><path d="M20 11a8 8 0 0 0-13.7-5.3L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 13.7 5.3L20 16"/><path d="M20 20v-4h-4"/></g>
-    <g id="i-trash" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M7 4h10l-1 16H8z"/><path d="M7.6 9h8.8"/></g>
-    <g id="i-eggs" fill="none" stroke-width="1.6" stroke-linecap="round"><ellipse cx="12" cy="13.5" rx="5.5" ry="7"/></g>
-    <g id="i-meat" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M6 15c0-4 2.7-7 6-7s6 3 6 7z"/><path d="M5 18h14"/></g>
-  </defs>
-</svg>
-
-<div class="app">
-  <nav class="tabs" id="nav" aria-label="Разделы">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true">К</span>
-      <span class="brand-name">Кухня</span>
-    </div>
-    <div class="tabs-scroll" data-tabs></div>
-    <div class="tabs-foot">
-      <button class="sync" type="button" data-sync-status hidden></button>
-      <a class="tab" href="#settings" data-route="settings" title="Настройки">
-        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg>
-        <span class="tab-label">Настройки</span>
-      </a>
-    </div>
-    <button class="rail" type="button" data-act="rail" aria-expanded="true" aria-controls="nav"
-            aria-label="Свернуть боковую панель">
-      <span class="rail-grip" aria-hidden="true"></span>
-    </button>
-  </nav>
-
-  <!-- The alert is persistent, because a toast that has faded is
-       indistinguishable from a working app, and a full storage quota means
-       everything since the last write lives only until this tab closes.
-       It shares a column with the stage so the phone stacks it above the
-       screen and the desktop keeps it out of the sidebar. -->
-  <div class="work">
-    <div class="alert" data-alert role="alert" hidden></div>
-    <div class="stage" data-stage aria-live="polite"></div>
-  </div>
+<!-- The app was installed on a phone from this address, so this page has to keep
+     answering it. A redirect would strand anyone who saved the old icon without
+     telling them why; a door with a sign does not. -->
+<div class="card">
+  <h1>Кухня переехала</h1>
+  <p>Теперь она живёт вместе с остальными приложениями — вещами, уборкой и местами — и настраивается в одном месте.</p>
+  <p class="dim">Данные никуда не делись: склад, список и ключ доступа хранятся в браузере по этому же адресу и подхватятся сами. Открой новый адрес и, если Кухня стояла на телефоне значком, поставь её заново оттуда.</p>
+  <a class="btn" href="https://xdecent0.github.io/life/apps/kitchen/">Открыть Кухню</a>
+  <p class="dim">Пульт со всеми приложениями — <a href="https://xdecent0.github.io/life/hub/">xdecent0.github.io/life/hub</a></p>
 </div>
 
-<script type="module" src="./app.js"></script>
 </body>
 </html>

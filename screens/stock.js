@@ -4,6 +4,7 @@
 
 import { html, raw, icon, esc, cap, fmtMoney, fmtDate, toast, wide } from "../lib/dom.js";
 import { touch, commit, uid } from "../lib/state.js";
+import { mark } from "../lib/sync.js";
 import * as M from "../lib/model.js";
 import { rank, lineMatchesProduct } from "../lib/recipes.js";
 import { toStockItem } from "../lib/receipt.js";
@@ -36,6 +37,8 @@ let query = "";
  * by zone (the way it is physically stored), or flat by what spoils first.
  */
 let grouping = "aisle";
+/** The one cell open for editing: {id, field}. Only ever one, so Escape is unambiguous. */
+let editing = null;
 
 export const alive = (state) => state.stock.filter((i) => !i.deleted && !i.empty);
 
@@ -289,18 +292,32 @@ function desk(state) {
     ...(showPrice ? [["цена", ""]] : []),
   ];
 
+  /** A cell that can be typed over: shows the value, or the editor when opened. */
+  const cell = (entry, field, body, cls = "") => {
+    if (editing?.id === entry.id && editing.field === field) {
+      return `<form class="tedit" data-act-submit="editSave">
+        <input class="field field--cell" name="value" value="${esc(entry[field] ?? "")}"
+            aria-label="${field === "product" ? "Название" : "Сколько"}" autocomplete="off"
+            data-act-blur="editSave" autofocus>
+      </form>`;
+    }
+    return `<span class="${cls} tcell" data-act-dbl="editOpen" data-id="${entry.id}" data-field="${field}"
+        title="Двойной клик — правка">${body}</span>`;
+  };
+
   const row = (entry, index) => {
     const burns = M.isBurning(entry, now);
     const on = selected.has(entry.id);
 
     return html`<div class="trow" data-act="focus" data-id="${entry.id}" data-index="${index}"
-        data-burning="${burns ? 1 : 0}" data-focused="${index === cursor ? 1 : 0}" role="row" tabindex="-1">
+        data-burning="${burns ? 1 : 0}" data-focused="${index === cursor ? 1 : 0}"
+        data-marked="${on ? 1 : 0}" role="row" tabindex="-1">
       <button class="tcheck" type="button" data-act="mark" data-id="${entry.id}" role="checkbox" aria-checked="${on}"
           aria-label="Выделить ${entry.product}">
         ${raw(on ? icon("i-check", { size: 11, stroke: "#f4f1e6", width: 3 }) : "")}
       </button>
-      <span class="tname">${entry.product}${raw(entry.opened ? ` <span class="tflag">вскрыт</span>` : "")}</span>
-      <span>${raw(amountCell(entry))}</span>
+      ${raw(cell(entry, "product", `${esc(entry.product)}${entry.opened ? ` <span class="tflag">вскрыт</span>` : ""}`, "tname"))}
+      ${raw(cell(entry, "qty", amountCell(entry)))}
       <span class="tdim">${entry.zone}</span>
       <span class="tlife">${raw(lifeCell(entry, now))}</span>
       ${raw(showStore ? `<span class="tdim">${storeOf(entry) ? esc(storeOf(entry)) : none()}</span>` : "")}
@@ -343,8 +360,15 @@ function desk(state) {
       ${raw(filterChips())}
       <span class="toolbar-gap"></span>
       ${raw(marked.length
-        ? `<span class="toolbar-bulk">Выделено ${marked.length} · <button class="linkbtn" type="button" data-act="bulkUsed">списать</button> · <button class="linkbtn" type="button" data-act="bulkToList">в список</button></span>`
-        : `<span class="toolbar-hint"><kbd>↑↓</kbd> ходить · <kbd>Space</kbd> выделять · <kbd>E</kbd> списать</span>`)}
+        ? `<span class="toolbar-bulk">Выделено ${marked.length} ·
+             <button class="linkbtn" type="button" data-act="bulkUsed">списать</button> ·
+             <button class="linkbtn" type="button" data-act="bulkToList">в список</button> ·
+             <button class="linkbtn" type="button" data-act="bulkOpened">вскрыт</button> ·
+             <button class="linkbtn linkbtn--danger" type="button" data-act="bulkDelete">удалить</button>
+             <span class="toolbar-move">переместить: ${ZONES.map((z) =>
+               `<button class="linkbtn" type="button" data-act="bulkZone" data-zone="${esc(z)}">${esc(z)}</button>`).join(" · ")}</span>
+           </span>`
+        : `<span class="toolbar-hint"><kbd>↑↓</kbd> ходить · <kbd>Space</kbd> выделять · <kbd>Enter</kbd> править · <kbd>Del</kbd> удалить</span>`)}
     </div>
 
     <div class="split">
@@ -390,6 +414,19 @@ function inspector(state, entry, marked, now) {
   </div>
 
   <div class="insp-block">
+    <div class="label">Где лежит</div>
+    <div class="chips">
+      ${raw(ZONES.map((z) => `<button class="chip" type="button" data-act="zone1" data-zone="${esc(z)}" aria-pressed="${entry.zone === z}">${esc(z)}</button>`).join(""))}
+    </div>
+  </div>
+
+  <div class="insp-block">
+    <div class="label">Упаковка</div>
+    <p class="prose prose--muted">Вскрытое живёт по короткой колонке справочника, и срок пересчитывается со дня, когда вскрыл.</p>
+    <button class="btn btn--ghost btn--sm" type="button" data-act="opened1">${entry.opened ? "Закрыть обратно" : "Отметить вскрытым"}</button>
+  </div>
+
+  <div class="insp-block">
     <div class="label">Откуда знаю</div>
     <p class="prose">${[
       receipt ? `Чек «${receipt.store}» ${fmtDate(receipt.at)}${entry.price ? `, ${fmtMoney(entry.price)}` : ""}.` : "Добавлено руками.",
@@ -428,11 +465,38 @@ export default {
     selected.clear();
     cursor = 0;
     query = "";
+    editing = null;
   },
 
   keys(e, state) {
     if (!wide.matches) return;
     const shown = visible(state);
+
+    // Escape reaches here even from inside the open editor — that is the one
+    // key that has to work while typing, because it is how you get out.
+    if (e.key === "Escape") {
+      if (!editing) return;
+      editing = null;
+      touch();
+      return;
+    }
+
+    if (e.key === "Enter") {
+      const entry = shown[cursor];
+      if (!entry || editing) return;
+      e.preventDefault();
+      editing = { id: entry.id, field: "product" };
+      touch();
+      return;
+    }
+
+    if (e.key === "Delete") {
+      const entry = shown[cursor];
+      if (!entry) return;
+      e.preventDefault();
+      remove([entry]);
+      return;
+    }
 
     if (e.key === "/") {
       e.preventDefault();
@@ -464,6 +528,57 @@ export default {
       grouping = el.dataset.grouping;
       cursor = 0;
       touch();
+    },
+
+    editOpen(el) {
+      editing = { id: el.dataset.id, field: el.dataset.field };
+      touch();
+    },
+
+    /**
+     * Saving is idempotent on purpose: it runs on Enter and again on the blur
+     * that Enter causes. Writing the same value twice would still stamp a new
+     * `at` and push a pointless change through the sync, so an unchanged value
+     * closes the editor and touches nothing.
+     */
+    editSave(node) {
+      if (!editing) return;
+      const form = node.closest("form") ?? node;
+      const value = String(new FormData(form).get("value") ?? "").trim();
+      const { id, field } = editing;
+      editing = null;
+
+      let changed = false;
+      commit("stock.edit", (s) => {
+        const entry = s.stock.find((i) => i.id === id);
+        if (!entry) return null;
+        if (field === "product" && !value) return null;
+        if ((entry[field] ?? "") === value) return null;
+
+        entry[field] = value;
+        // A renamed product is a different thing to the reference table, so its
+        // shelf life is looked up again rather than kept from the old name.
+        if (field === "product") {
+          const life = M.shelfLife(value, s.shelf, { opened: entry.opened, zone: entry.zone });
+          entry.shelfDays = life?.days ?? null;
+        }
+        entry.at = Date.now();
+        changed = true;
+        return { kind: "stock", id: entry.id };
+      });
+
+      if (!changed) touch();
+    },
+
+    zone1(el, state) {
+      const entry = visible(state)[cursor];
+      if (!entry) return;
+      move([entry], el.dataset.zone);
+    },
+
+    opened1(_el, state) {
+      const entry = visible(state)[cursor];
+      if (entry) setOpened([entry], !entry.opened);
     },
 
     add(form, state) {
@@ -575,8 +690,109 @@ export default {
       toast(`${marked.length} ${M.plural(marked.length, "позиция", "позиции", "позиций")} в списке`);
       selected.clear();
     },
+
+    bulkZone(el, state) {
+      move(alive(state).filter((i) => selected.has(i.id)), el.dataset.zone);
+      selected.clear();
+    },
+
+    bulkOpened(_el, state) {
+      const marked = alive(state).filter((i) => selected.has(i.id));
+      // Mixed selections open rather than toggle each one: "вскрыт" as a command
+      // has to mean the same thing for every row it is pressed on.
+      setOpened(marked, !marked.every((i) => i.opened));
+      selected.clear();
+    },
+
+    bulkDelete(_el, state) {
+      remove(alive(state).filter((i) => selected.has(i.id)));
+      selected.clear();
+    },
   },
 };
+
+/**
+ * Deleting says the record should not exist — different from eating the thing,
+ * which is what "съел" records. A tombstone rather than a splice, so the removal
+ * survives the trip through the other device instead of coming back on sync.
+ */
+function remove(entries) {
+  if (!entries.length) return;
+  const ids = entries.map((e) => e.id);
+  const undoData = entries.map((e) => ({ id: e.id, at: e.at }));
+
+  commit("stock.remove", (s) => {
+    for (const entry of s.stock) if (ids.includes(entry.id)) mark(entry, "deleted", true);
+    return { kind: "stock", bulk: true };
+  });
+
+  for (const id of ids) selected.delete(id);
+
+  toast(
+    entries.length === 1
+      ? `${entries[0].product} удалён`
+      : `Удалено ${entries.length}`,
+    "calm",
+    {
+      undo: () => commit("stock.undelete", (s) => {
+        for (const entry of s.stock) {
+          const was = undoData.find((u) => u.id === entry.id);
+          if (was) mark(entry, "deleted", false);
+        }
+        return { kind: "stock", bulk: true };
+      }),
+    }
+  );
+}
+
+/** Moving between zones is not cosmetic: a freezer keeps things far longer than a shelf. */
+function move(entries, zone) {
+  if (!entries.length || !ZONES.includes(zone)) return;
+  const ids = entries.map((e) => e.id);
+
+  commit("stock.move", (s) => {
+    for (const entry of s.stock) {
+      if (!ids.includes(entry.id)) continue;
+      entry.zone = zone;
+      const life = M.shelfLife(entry.product, s.shelf, { opened: entry.opened, zone });
+      if (life) entry.shelfDays = life.days;
+      entry.at = Date.now();
+    }
+    return { kind: "stock", bulk: true };
+  });
+
+  toast(entries.length === 1
+    ? `${entries[0].product} → ${zone}`
+    : `${entries.length} ${M.plural(entries.length, "позиция", "позиции", "позиций")} → ${zone}`);
+}
+
+/**
+ * Opening a packet starts a new, shorter clock. The reference table has a second
+ * column for exactly this, and the countdown restarts from today — the sealed
+ * days already spent do not carry over.
+ */
+function setOpened(entries, opened) {
+  if (!entries.length) return;
+  const ids = entries.map((e) => e.id);
+
+  commit("stock.opened", (s) => {
+    for (const entry of s.stock) {
+      if (!ids.includes(entry.id)) continue;
+      entry.opened = opened;
+      const life = M.shelfLife(entry.product, s.shelf, { opened, zone: entry.zone });
+      if (life) {
+        entry.shelfDays = life.days;
+        if (opened) entry.boughtAt = M.today();
+      }
+      entry.at = Date.now();
+    }
+    return { kind: "stock", bulk: true };
+  });
+
+  toast(entries.length === 1
+    ? `${entries[0].product} — ${opened ? "вскрыт" : "закрыт"}`
+    : `${entries.length} ${M.plural(entries.length, "позиция", "позиции", "позиций")} — ${opened ? "вскрыты" : "закрыты"}`);
+}
 
 /**
  * Closing a product out records what happened to it. Thrown-away food means the

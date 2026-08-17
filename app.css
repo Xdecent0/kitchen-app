@@ -1812,6 +1812,43 @@ kbd {
   grid-template-columns: 32px 1.5fr 0.8fr 0.7fr 1.1fr 0.9fr 0.6fr;
 }
 
+/* A cell you can type over. It stays flat until the pointer is on it — a table
+   full of boxes would look like a form nobody filled in. */
+.tcell {
+  min-width: 0;
+  border-radius: 7px;
+  padding: 3px 6px;
+  margin: -3px -6px;
+  border: 1px solid transparent;
+}
+
+.tedit {
+  display: flex;
+  min-width: 0;
+}
+
+.field--cell {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: var(--t-body);
+  border-radius: 7px;
+}
+
+.trow[data-marked="1"] {
+  background: var(--surface);
+}
+
+.linkbtn--danger {
+  color: var(--alarm-ink);
+}
+
+.toolbar-move {
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
 /* Quantity is the answer to "how much is left", so it is read as a value, not
    as a dim attribute of the row. */
 .tamount {
@@ -3316,6 +3353,13 @@ kbd {
 
   .tcheck:hover {
     border-color: var(--ink);
+  }
+
+  /* The cell says it is editable only when the pointer is on it — the hint
+     costs nothing when it is not needed and is unmissable when it is. */
+  .tcell:hover {
+    border-color: var(--line-firm);
+    background: var(--bg);
   }
 
   .field:hover,

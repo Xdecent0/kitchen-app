@@ -263,7 +263,9 @@ document.addEventListener("visibilitychange", () => {
 wide.addEventListener("change", () => render());
 
 document.addEventListener("keydown", (e) => {
-  if (e.target?.closest?.("input, textarea, select")) return;
+  // Escape means "get me out of this" wherever it is pressed — including out of
+  // a field being edited. Every other key belongs to whatever has focus.
+  if (e.target?.closest?.("input, textarea, select") && e.key !== "Escape") return;
   SCREENS[current.name].keys?.(e, get());
 });
 
@@ -278,6 +280,28 @@ document.addEventListener("click", (e) => {
 
   e.preventDefault();
   handler(el, get());
+});
+
+/* Editing in place: a second click on something already selected opens it, the
+   way a filename does. Separate from the click above so a single click keeps
+   meaning "select" and nothing opens by accident. */
+document.addEventListener("dblclick", (e) => {
+  const el = e.target.closest("[data-act-dbl]");
+  if (!el) return;
+
+  const handler = SCREENS[current.name].actions?.[el.dataset.actDbl];
+  if (!handler) return;
+
+  e.preventDefault();
+  handler(el, get());
+});
+
+/* Leaving a field is an answer too. Without this, clicking away from an open
+   editor would throw the typing away on the next render. */
+document.addEventListener("focusout", (e) => {
+  const el = e.target.closest("[data-act-blur]");
+  if (!el) return;
+  SCREENS[current.name].actions?.[el.dataset.actBlur]?.(el, get());
 });
 
 document.addEventListener("change", (e) => {

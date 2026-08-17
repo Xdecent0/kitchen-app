@@ -1519,6 +1519,20 @@ button {
   color: inherit;
 }
 
+/* It is a button now, so it has to sit like the text it replaced rather than
+   like a control someone dropped into the corner. */
+.sync {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+}
+
+.sync[disabled] {
+  cursor: progress;
+}
+
 /* ---------- toasts ---------- */
 
 #toasts {
@@ -1837,6 +1851,40 @@ kbd {
 
 .trow[data-marked="1"] {
   background: var(--surface);
+}
+
+/* A stack of the same thing, and the records under it once it is open. The
+   indent is what says "these are inside that", so it carries a rule rather
+   than being loose padding. */
+.trow--stack {
+  cursor: pointer;
+}
+
+.tstack-caret {
+  display: flex;
+  justify-content: center;
+}
+
+.trow--child {
+  box-shadow: inset 2px 0 0 var(--line-firm);
+  background: var(--surface);
+}
+
+.trow--child .tname {
+  padding-left: 10px;
+}
+
+.row--stack .row-name {
+  font-weight: 600;
+}
+
+.row-nest {
+  box-shadow: inset 2px 0 0 var(--line-firm);
+  background: var(--surface);
+}
+
+.field--date {
+  max-width: 200px;
 }
 
 .linkbtn--danger {

@@ -5,7 +5,8 @@ import { html, raw, icon, esc, cap, fmtDate, fmtMoney, toast } from "../lib/dom.
 import { commit, uid } from "../lib/state.js";
 import * as M from "../lib/model.js";
 import { rank, LEVELS, lineMatchesProduct } from "../lib/recipes.js";
-import { ZONE_ICON, ZONES } from "./stock.js";
+import { mark } from "../lib/sync.js";
+import { ZONE_ICON, ZONES, dateValue } from "./stock.js";
 
 const find = (state, id) => state.stock.find((i) => i.id === id);
 
@@ -61,6 +62,22 @@ export default {
         </section>
 
         <section class="pane">
+          <div class="label">Что это и сколько</div>
+          <form class="stack stack--tight" data-act-submit="rename">
+            <input class="field" name="product" value="${entry.product}" aria-label="Название" autocomplete="off" required>
+            <input class="field" name="qty" value="${entry.qty ?? ""}" placeholder="сколько" aria-label="Сколько" autocomplete="off">
+            <button class="btn btn--ghost btn--sm" type="submit">Сохранить</button>
+          </form>
+        </section>
+
+        <section class="pane">
+          <div class="label">Годен до</div>
+          <input class="field field--date" type="date" value="${raw(dateValue(entry))}"
+              aria-label="Годен до" data-act-change="expires">
+          <p class="prose prose--muted">${entry.expires ? "Дата с упаковки — она главнее справочника." : "Считается по справочнику от даты покупки. Поставь дату с пачки, если она есть."}</p>
+        </section>
+
+        <section class="pane">
           <div class="label">Откуда знаю</div>
           <p class="prose">${provenance}</p>
         </section>
@@ -69,6 +86,13 @@ export default {
           <div class="label">Где лежит</div>
           <div class="chips">
             ${raw(ZONES.map((z) => `<button class="chip" type="button" data-act="zone" data-zone="${esc(z)}" aria-pressed="${entry.zone === z}">${esc(z)}</button>`).join(""))}
+          </div>
+        </section>
+
+        <section class="pane">
+          <div class="label">Категория</div>
+          <div class="chips">
+            ${raw(state.aisles.map((a) => `<button class="chip chip--sm" type="button" data-act="aisle" data-aisle="${esc(a.name)}" aria-pressed="${M.aisleOfEntry(entry, state.aisles).name === a.name}">${esc(a.name)}</button>`).join(""))}
           </div>
         </section>
 
@@ -86,6 +110,7 @@ export default {
         <button class="btn btn--ghost" type="button" data-act="opened">${entry.opened ? "Закрыт" : "Открыл"}</button>
         <button class="btn btn--ghost" type="button" data-act="ate">Съел</button>
         <button class="btn btn--ghost btn--danger" type="button" data-act="threw">Выбросил</button>
+        <button class="btn btn--ghost btn--danger" type="button" data-act="remove">Удалить</button>
       </div>
     </main>`;
   },
@@ -109,8 +134,80 @@ export default {
         const entry = s.stock.find((i) => i.id === currentId());
         if (!entry) return null;
         entry.zone = el.dataset.zone;
+        // The freezer is not a label: the same thing keeps two orders of
+        // magnitude longer there, so the life is looked up again for the move.
+        const life = M.shelfLife(entry.product, s.shelf, { opened: entry.opened, zone: entry.zone });
+        if (life) entry.shelfDays = life.days;
         entry.at = Date.now();
         return { kind: "stock", id: entry.id };
+      });
+    },
+
+    aisle(el) {
+      commit("stock.aisle", (s) => {
+        const entry = s.stock.find((i) => i.id === currentId());
+        if (!entry) return null;
+        // Picking what the table would have guessed clears the override rather
+        // than freezing it, so a better table still helps this record later.
+        entry.aisle = M.aisleOf(entry.product, s.aisles).name === el.dataset.aisle ? null : el.dataset.aisle;
+        entry.at = Date.now();
+        return { kind: "stock", id: entry.id };
+      });
+    },
+
+    rename(form) {
+      const data = new FormData(form);
+      const product = String(data.get("product") ?? "").trim();
+      const qty = String(data.get("qty") ?? "").trim();
+      if (!product) return;
+
+      commit("stock.rename", (s) => {
+        const entry = s.stock.find((i) => i.id === currentId());
+        if (!entry) return null;
+        if (entry.product === product && (entry.qty ?? "") === qty) return null;
+
+        entry.product = product;
+        entry.qty = qty;
+        const life = M.shelfLife(product, s.shelf, { opened: entry.opened, zone: entry.zone });
+        entry.shelfDays = life?.days ?? null;
+        entry.at = Date.now();
+        return { kind: "stock", id: entry.id };
+      });
+
+      toast("Сохранено");
+    },
+
+    expires(el) {
+      const value = el.value;
+      commit("stock.expires", (s) => {
+        const entry = s.stock.find((i) => i.id === currentId());
+        if (!entry) return null;
+        entry.expires = value ? Date.parse(`${value}T00:00:00Z`) : null;
+        entry.at = Date.now();
+        return { kind: "stock", id: entry.id };
+      });
+      toast(value ? `Срок до ${value}` : "Срок снова считается по справочнику");
+    },
+
+    remove(_el, state) {
+      const entry = find(state, currentId());
+      if (!entry) return;
+
+      commit("stock.remove", (s) => {
+        const target = s.stock.find((i) => i.id === entry.id);
+        if (!target) return null;
+        mark(target, "deleted", true);
+        return { kind: "stock", id: target.id };
+      });
+
+      location.hash = "stock";
+      toast(`${entry.product} удалён`, "calm", {
+        undo: () => commit("stock.undelete", (s) => {
+          const target = s.stock.find((i) => i.id === entry.id);
+          if (!target) return null;
+          mark(target, "deleted", false);
+          return { kind: "stock", id: target.id };
+        }),
       });
     },
 

@@ -143,14 +143,26 @@ function renderSyncStatus() {
   const state = get();
   const pending = state.queue.length;
 
+  // The strip is the one thing on screen that always says how the exchange is
+  // doing, so it is also where the exchange is started. It used to be a label,
+  // and the button for it lived two panes deep in the settings.
   if (!gh.isConfigured()) {
     el.hidden = false;
     el.dataset.tone = "idle";
-    el.innerHTML = `<a href="#settings">Репозиторий не подключён</a>`;
+    el.dataset.act = "go";
+    el.dataset.to = "settings";
+    el.disabled = false;
+    el.textContent = "Репозиторий не подключён";
+    el.title = "Открыть настройки";
     return;
   }
 
   el.hidden = false;
+  el.dataset.act = "sync";
+  delete el.dataset.to;
+  el.disabled = syncing();
+  el.title = syncing() ? "Идёт обмен" : "Синхронизировать сейчас";
+
   if (syncing()) {
     el.dataset.tone = "busy";
     el.textContent = "Синхронизация…";
@@ -305,11 +317,17 @@ document.addEventListener("focusout", (e) => {
 });
 
 document.addEventListener("change", (e) => {
-  const el = e.target.closest("input[type=file][data-act]");
-  if (!el) return;
+  const file = e.target.closest("input[type=file][data-act]");
+  if (file) {
+    SCREENS[current.name].actions?.[file.dataset.act]?.(file, get());
+    return;
+  }
 
-  const handler = SCREENS[current.name].actions?.[el.dataset.act];
-  handler?.(el, get());
+  /* Pickers answer on change, not on click: a date or a dropdown has no useful
+     value at the moment it is opened. */
+  const el = e.target.closest("[data-act-change]");
+  if (!el) return;
+  SCREENS[current.name].actions?.[el.dataset.actChange]?.(el, get());
 });
 
 document.addEventListener("submit", (e) => {

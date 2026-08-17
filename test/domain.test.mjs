@@ -922,3 +922,44 @@ test("набранный руками продукт получает зону �
   const chosen = toStockItem({ product: "тортилья", zone: "морозилка" }, { shelf: SEED_SHELF, boughtAt: Date.UTC(2026, 7, 16), id: "s3" });
   assert.equal(chosen.zone, "морозилка");
 });
+
+test("человек сказал, в какой отдел — справочник не спорит", () => {
+  const aisles = SEED_AISLES;
+  assert.equal(M.aisleOfEntry({ product: "Гречка" }, aisles).name, "бакалея", "без ответа работает догадка");
+  assert.equal(M.aisleOfEntry({ product: "Гречка", aisle: "заморозка" }, aisles).name, "заморозка");
+
+  // Отдела, которого нет в таблице, всё равно достаточно: это ответ человека,
+  // и терять его из-за того, что таблицу ещё не дописали, нельзя.
+  const own = M.aisleOfEntry({ product: "Что-то", aisle: "мой ящик" }, aisles);
+  assert.equal(own.name, "мой ящик");
+});
+
+test("одинаковые продукты складываются в одну строку, но не в одну запись", () => {
+  const now = Date.UTC(2026, 7, 17);
+  const day = 86400000;
+  const items = [
+    { id: "a", product: "Мороженое", qty: "рожок", boughtAt: now - 2 * day, shelfDays: 180 },
+    { id: "b", product: "мороженое", qty: "ведро", boughtAt: now - 100 * day, shelfDays: 101 },
+    { id: "c", product: "Хлеб", boughtAt: now, shelfDays: 4 },
+  ];
+
+  const groups = M.collapseSame(items, now);
+  assert.equal(groups.length, 2, "две строки: мороженое и хлеб");
+
+  const ice = groups.find((g) => g.key === "мороженое");
+  assert.equal(ice.count, 2);
+  // Наружу выходит то, что испортится первым, — по нему строка и горит.
+  assert.equal(ice.head.id, "b");
+  assert.equal(ice.entries.map((e) => e.id).join(""), "bа".replace("а", "a"));
+});
+
+test("дата с пачки главнее справочника и рисует полоску сама", () => {
+  const now = Date.UTC(2026, 7, 17);
+  const day = 86400000;
+  const byHand = { product: "Тортилья", boughtAt: now - 5 * day, shelfDays: null, expires: now + 5 * day };
+
+  const f = M.freshness(byHand, now);
+  assert.equal(f.left, 5);
+  // Без этого у выставленного руками срока были бы дни, но не было бы шкалы.
+  assert.equal(f.share, 0.5);
+});

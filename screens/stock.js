@@ -39,6 +39,8 @@ let query = "";
 let grouping = "aisle";
 /** The one cell open for editing: {id, field}. Only ever one, so Escape is unambiguous. */
 let editing = null;
+/** Names whose stack of records is open. Two tubs of ice cream are two records. */
+let opened = new Set();
 
 export const alive = (state) => state.stock.filter((i) => !i.deleted && !i.empty);
 
@@ -83,8 +85,33 @@ function groups(state) {
   return [{ name: null, entries: items }];
 }
 
+/**
+ * A group's rows in display order: one line per name, with the stack under it
+ * when that name is open. What the cursor and the keyboard count is exactly what
+ * the eye sees, so a folded stack is one row and an open one is several.
+ */
+function linesOf(entries, now = M.today()) {
+  const lines = [];
+
+  for (const stack of M.collapseSame(entries, now)) {
+    if (stack.count === 1) {
+      lines.push({ kind: "entry", entry: stack.head });
+      continue;
+    }
+
+    // A folded stack is a lid, not a record: it carries no entry of its own, so
+    // the cursor and the selection never see one row standing in for three.
+    const isOpen = opened.has(stack.key);
+    lines.push({ kind: "stack", stack, open: isOpen });
+    if (isOpen) for (const entry of stack.entries) lines.push({ kind: "entry", entry, child: true });
+  }
+
+  return lines;
+}
+
 /** Display order flattened, so the cursor and the keyboard count the same rows the eye does. */
-const visible = (state) => groups(state).flatMap((g) => g.entries);
+const visible = (state) =>
+  groups(state).flatMap((g) => linesOf(g.entries).filter((l) => l.kind === "entry").map((l) => l.entry));
 
 function groupSwitch() {
   const options = [
@@ -199,7 +226,15 @@ function phone(state) {
 
   const rows = shown.length
     ? groups(state).map((g) => html`${raw(g.name ? `<div class="aisle">${esc(g.name)} <span class="num">${g.entries.length}</span></div>` : "")}
-        ${raw(g.entries.map((i) => stockRow(i, now)).join(""))}`).join("")
+        ${raw(linesOf(g.entries, now).map((line) => line.kind === "stack"
+          ? `<button class="row row--stack" type="button" data-act="stack" data-key="${esc(line.stack.key)}" aria-expanded="${line.open}">
+               <span class="tile" aria-hidden="true">${icon(line.open ? "i-chev-down" : "i-chev-right", { size: 16, stroke: "#1c3327" })}</span>
+               <span class="row-main">
+                 <span class="row-name">${esc(line.stack.product)}</span>
+                 <span class="row-why">${esc(`${line.stack.count} ${M.plural(line.stack.count, "штука", "штуки", "штук")}`)}${line.open ? "" : ` · ${esc(M.expiryLabel(line.stack.head, now))}`}</span>
+               </span>
+             </button>`
+          : `<div class="${line.child ? "row-nest" : ""}">${stockRow(line.entry, now)}</div>`).join(""))}`).join("")
     : html`<div class="empty">
         <h2>Здесь пусто</h2>
         <p>По этому фильтру ничего нет — редкий случай, когда пустой экран означает, что всё в порядке.</p>
@@ -235,6 +270,14 @@ function phone(state) {
 
 /** Placeholder for a cell we genuinely do not know, kept out of prose punctuation. */
 const none = () => '<span class="tnone" aria-label="неизвестно">–</span>';
+
+/** What a date input wants: the expiry as YYYY-MM-DD, or nothing at all. */
+export function dateValue(entry) {
+  const at = entry?.expires ?? null;
+  if (!at) return "";
+  const d = new Date(at);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
 
 /**
  * How much is left, in the words the entry actually has.
@@ -305,11 +348,11 @@ function desk(state) {
         title="Двойной клик — правка">${body}</span>`;
   };
 
-  const row = (entry, index) => {
+  const row = (entry, index, child = false) => {
     const burns = M.isBurning(entry, now);
     const on = selected.has(entry.id);
 
-    return html`<div class="trow" data-act="focus" data-id="${entry.id}" data-index="${index}"
+    return html`<div class="trow${child ? " trow--child" : ""}" data-act="focus" data-id="${entry.id}" data-index="${index}"
         data-burning="${burns ? 1 : 0}" data-focused="${index === cursor ? 1 : 0}"
         data-marked="${on ? 1 : 0}" role="row" tabindex="-1">
       <button class="tcheck" type="button" data-act="mark" data-id="${entry.id}" role="checkbox" aria-checked="${on}"
@@ -325,6 +368,23 @@ function desk(state) {
     </div>`;
   };
 
+  /** The lid over a stack of the same thing: how many, and the nearest date. */
+  const stackRow = (stack, isOpen) => {
+    const burns = M.isBurning(stack.head, now);
+    const zones = [...new Set(stack.entries.map((e) => e.zone))];
+
+    return html`<div class="trow trow--stack" data-act="stack" data-key="${stack.key}"
+        data-burning="${burns ? 1 : 0}" data-open="${isOpen ? 1 : 0}" role="row" tabindex="-1">
+      <span class="tstack-caret" aria-hidden="true">${raw(icon(isOpen ? "i-chev-down" : "i-chev-right", { size: 14, stroke: "#5f7468" }))}</span>
+      <span class="tname">${stack.product} <span class="tflag">${stack.count} ${M.plural(stack.count, "штука", "штуки", "штук")}</span></span>
+      <span class="tdim">${isOpen ? "" : stack.entries.map((e) => e.qty).filter(Boolean).join(" + ")}</span>
+      <span class="tdim">${zones.length === 1 ? zones[0] : `${zones.length} зоны`}</span>
+      <span class="tlife">${raw(isOpen ? "" : lifeCell(stack.head, now))}</span>
+      ${raw(showStore ? "<span></span>" : "")}
+      ${raw(showPrice ? "<span></span>" : "")}
+    </div>`;
+  };
+
   // The running index is the one the cursor and the keyboard use, so it counts
   // across group headings rather than restarting inside each one.
   let index = -1;
@@ -332,7 +392,12 @@ function desk(state) {
     const head = g.name
       ? `<div class="trow trow--group" role="row"><span role="rowheader">${esc(g.name)}</span><span class="tdim num">${g.entries.length}</span></div>`
       : "";
-    return head + g.entries.map((entry) => row(entry, (index += 1))).join("");
+
+    const body = linesOf(g.entries, now).map((line) => line.kind === "stack"
+      ? stackRow(line.stack, line.open)
+      : row(line.entry, (index += 1), line.child)).join("");
+
+    return head + body;
   }).join("");
 
   return html`<main class="screen">
@@ -418,6 +483,20 @@ function inspector(state, entry, marked, now) {
     <div class="chips">
       ${raw(ZONES.map((z) => `<button class="chip" type="button" data-act="zone1" data-zone="${esc(z)}" aria-pressed="${entry.zone === z}">${esc(z)}</button>`).join(""))}
     </div>
+  </div>
+
+  <div class="insp-block">
+    <div class="label">Категория</div>
+    <div class="chips">
+      ${raw(state.aisles.map((a) => `<button class="chip chip--sm" type="button" data-act="aisle" data-aisle="${esc(a.name)}" aria-pressed="${M.aisleOfEntry(entry, state.aisles).name === a.name}">${esc(a.name)}</button>`).join(""))}
+    </div>
+  </div>
+
+  <div class="insp-block">
+    <div class="label">Годен до</div>
+    <input class="field field--date" type="date" value="${raw(dateValue(entry))}"
+        aria-label="Годен до" data-act-change="expires" data-id="${entry.id}">
+    <p class="prose prose--muted">${entry.expires ? "Дата с упаковки — она главнее справочника. Очисти поле, чтобы вернуться к расчёту." : "Пока считается от даты покупки по справочнику. Поставь дату с пачки, если она есть."}</p>
   </div>
 
   <div class="insp-block">
@@ -530,9 +609,49 @@ export default {
       touch();
     },
 
+    stack(el) {
+      const key = el.dataset.key;
+      opened.has(key) ? opened.delete(key) : opened.add(key);
+      cursor = 0;
+      touch();
+    },
+
     editOpen(el) {
       editing = { id: el.dataset.id, field: el.dataset.field };
       touch();
+    },
+
+    /** The date printed on the packet outranks any table. */
+    expires(el, state) {
+      const entry = state.stock.find((i) => i.id === el.dataset.id) ?? visible(state)[cursor];
+      if (!entry) return;
+
+      const value = el.value;
+      commit("stock.expires", (s) => {
+        const target = s.stock.find((i) => i.id === entry.id);
+        if (!target) return null;
+        target.expires = value ? Date.parse(`${value}T00:00:00Z`) : null;
+        target.at = Date.now();
+        return { kind: "stock", id: target.id };
+      });
+
+      toast(value ? `${entry.product} — срок до ${value}` : `${entry.product} — срок снова из справочника`);
+    },
+
+    aisle(el, state) {
+      const entry = visible(state)[cursor];
+      if (!entry) return;
+      const name = el.dataset.aisle;
+
+      commit("stock.aisle", (s) => {
+        const target = s.stock.find((i) => i.id === entry.id);
+        if (!target) return null;
+        // Choosing the aisle the table would have guessed anyway clears the
+        // override instead of freezing it: then a better table still helps later.
+        target.aisle = M.aisleOf(target.product, s.aisles).name === name ? null : name;
+        target.at = Date.now();
+        return { kind: "stock", id: target.id };
+      });
     },
 
     /**
